@@ -1,0 +1,206 @@
+:root {
+  font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  color: #112031;
+  background:
+    radial-gradient(circle at top left, rgba(255, 196, 116, 0.35), transparent 30%),
+    linear-gradient(135deg, #fffaf0 0%, #f1f7ff 55%, #eef4ea 100%);
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.page-shell {
+  width: min(1120px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 3rem 0 4rem;
+}
+
+.hero-card,
+.panel {
+  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(17, 32, 49, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(17, 32, 49, 0.1);
+}
+
+.hero-card {
+  display: grid;
+  grid-template-columns: 1.7fr 0.8fr;
+  gap: 1.5rem;
+  padding: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.75rem;
+  color: #b35c1e;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  font-size: clamp(2rem, 5vw, 4rem);
+  line-height: 0.95;
+  margin-bottom: 1rem;
+}
+
+.lede {
+  max-width: 40rem;
+  color: #4f5d6b;
+  font-size: 1.05rem;
+}
+
+.stat-block {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1.5rem;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #112031, #27476d);
+  color: #fff8eb;
+}
+
+.stat-block span,
+.summary-box span {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.stat-block strong,
+.summary-box strong {
+  font-size: 2rem;
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr;
+  gap: 1.5rem;
+}
+
+.panel {
+  padding: 1.5rem;
+}
+
+.panel-accent {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(243, 248, 255, 0.88));
+}
+
+form {
+  display: grid;
+  gap: 1rem;
+}
+
+label {
+  display: grid;
+  gap: 0.45rem;
+}
+
+label span {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+input {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(17, 32, 49, 0.15);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.items-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.item-row {
+  display: grid;
+  grid-template-columns: 2fr 0.7fr 0.9fr;
+  gap: 0.75rem;
+}
+
+.primary-button,
+.secondary-button {
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+
+.primary-button {
+  padding: 0.95rem 1.2rem;
+  background: linear-gradient(135deg, #b35c1e, #e08c28);
+  color: white;
+  font-weight: 700;
+}
+
+.secondary-button {
+  padding: 0.7rem 1rem;
+  background: #eef4ea;
+  color: #112031;
+  font-weight: 600;
+}
+
+.primary-button:hover,
+.secondary-button:hover {
+  transform: translateY(-1px);
+}
+
+.summary-box {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  border-radius: 18px;
+  background: #112031;
+  color: #fff8eb;
+}
+
+@media (max-width: 860px) {
+  .hero-card,
+  .content-grid,
+  .item-row {
+    grid-template-columns: 1fr;
+  }
+
+  .page-shell {
+    width: min(100% - 1rem, 1120px);
+    padding-top: 1rem;
+  }
+}
+
