@@ -1,7 +1,7 @@
 from pydantic import ValidationError
 
 from app.config import SUPPORTED_CURRENCIES
-from app.schemas import CsvValidationError, CsvValidationResult, InvoiceRow
+from app.schemas import CsvValidationError, CsvValidationResult, PricingInvoiceCsvRow
 
 
 REQUIRED_COLUMNS = {
@@ -10,10 +10,11 @@ REQUIRED_COLUMNS = {
     "due_date",
     "customer_name",
     "customer_address",
-    "item_description",
-    "quantity",
-    "unit_price",
-    "tax_rate",
+    "dog_name",
+    "billing_month",
+    "subscription_plan",
+    "daily_count",
+    "include_test_run",
     "currency",
 }
 
@@ -26,7 +27,7 @@ def validate_invoice_rows(
     present_columns: set[str] = set(rows[0].keys()) if rows else set()
     missing_columns: list[str] = sorted(REQUIRED_COLUMNS - present_columns)
     errors: list[CsvValidationError] = []
-    valid_rows: list[InvoiceRow] = []
+    valid_rows: list[PricingInvoiceCsvRow] = []
 
     for column in missing_columns:
         errors.append(
@@ -49,7 +50,7 @@ def validate_invoice_rows(
 
     for index, row in enumerate(rows, start=2):
         try:
-            invoice_row = InvoiceRow.model_validate(row)
+            invoice_row = PricingInvoiceCsvRow.model_validate(row)
         except ValidationError as exc:
             for issue in exc.errors():
                 location = issue.get("loc", ())

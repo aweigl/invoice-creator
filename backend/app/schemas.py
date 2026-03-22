@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
+from typing import Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -80,6 +81,22 @@ class InvoiceRow(BaseModel):
     currency: str = Field(min_length=3, max_length=3)
 
 
+class PricingInvoiceCsvRow(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, str_strip_whitespace=True)
+
+    invoice_number: str = Field(min_length=1)
+    invoice_date: date
+    due_date: date
+    customer_name: str = Field(min_length=1)
+    customer_address: str = Field(min_length=1)
+    dog_name: str = Field(min_length=1)
+    billing_month: str = Field(pattern=r"^\d{4}-\d{2}$")
+    subscription_plan: Literal["none", "1x_week", "2x_week", "3x_week", "4x_week"]
+    daily_count: int = Field(ge=0)
+    include_test_run: bool
+    currency: str = Field(min_length=3, max_length=3)
+
+
 class InvoiceTotals(BaseModel):
     net_amount: Decimal
     tax_amount: Decimal
@@ -108,5 +125,4 @@ class CsvValidationResult(BaseModel):
     valid_rows: int
     invalid_rows: int
     errors: list[CsvValidationError]
-    sample_row: InvoiceRow | None = None
-
+    sample_row: PricingInvoiceCsvRow | None = None
