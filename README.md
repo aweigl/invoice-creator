@@ -40,6 +40,18 @@ npm run dev
 
 This starts the frontend and backend together.
 
+## Production Shape
+
+For production deployment, the Vue frontend is built into `frontend/dist` and served by FastAPI.
+
+That means a single deployed service can handle:
+
+- the web UI
+- the API endpoints
+- PDF generation
+
+This is the simplest shape for Railway, because only one service needs to be deployed.
+
 ## Frontend
 
 ```bash
@@ -69,6 +81,20 @@ The backend runs on `http://localhost:8000`.
 
 The backend CORS setup accepts local frontend origins such as `localhost` and `127.0.0.1` on any port for development.
 
+## Single-Service Production Run
+
+To test the production-style flow locally:
+
+```bash
+cd /Users/aweigl/Desktop/Projects/invoice-creator/frontend
+npm run build
+
+cd /Users/aweigl/Desktop/Projects/invoice-creator/backend
+.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+After the frontend build exists, FastAPI serves the built app from `frontend/dist`.
+
 ## Current Workflow
 
 1. Upload a CSV file in the frontend.
@@ -78,9 +104,20 @@ The backend CORS setup accepts local frontend origins such as `localhost` and `1
 
 The current CSV schema is shown in [sample-data/invoice-pricing-example.csv](/Users/aweigl/Desktop/Projects/invoice-creator/sample-data/invoice-pricing-example.csv).
 
+## Railway
+
+The repository now includes a root [Dockerfile](/Users/aweigl/Desktop/Projects/invoice-creator/Dockerfile) that:
+
+1. builds the Vue frontend
+2. installs the Python backend and WeasyPrint system dependencies
+3. serves the built frontend through FastAPI
+
+This lets Railway deploy the repo as a single service.
+
 ## Current API
 
 - `GET /health`
 - `POST /api/csv/validate`
 - `POST /api/invoices/validate-rows`
 - `POST /api/invoices/generate`
+- `POST /api/invoices/generate-single`

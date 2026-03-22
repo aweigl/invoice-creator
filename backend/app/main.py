@@ -1,8 +1,9 @@
 from io import BytesIO
+from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from app.config import MAX_CSV_BYTES
 from app.schemas import (
@@ -14,6 +15,8 @@ from app.services.pricing import build_invoice_document
 from app.services.validator import validate_invoice_rows
 from app.services.zip_bundle import build_zip_bundle
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+FRONTEND_DIST_DIR = PROJECT_ROOT / "frontend" / "dist"
 
 app = FastAPI(title="Invoice Creator API")
 
@@ -129,3 +132,33 @@ def generate_single_invoice(payload: PricingRowsPayload) -> StreamingResponse:
             "Content-Disposition": f'attachment; filename="{row.invoice_number}.pdf"',
         },
     )
+
+
+def _frontend_file_response(path: str = "index.html") -> FileResponse:
+    file_path = FRONTEND_DIST_DIR / path
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Frontend build not found. Run the frontend build before serving "
+                "the application through FastAPI."
+            ),
+        )
+    return FileResponse(file_path)
+
+
+@app.get("/")
+def serve_frontend_index() -> FileResponse:
+    return _frontend_file_response()
+
+
+@app.get("/{full_path:path}")
+def serve_frontend_app(full_path: str) -> FileResponse:
+    if full_path.startswith("api/") or full_path == "health":
+        raise HTTPException(status_code=404, detail="Not found.")
+
+    requested_file = FRONTEND_DIST_DIR / full_path
+    if requested_file.exists() and requested_file.is_file():
+        return FileResponse(requested_file)
+
+    return _frontend_file_response()

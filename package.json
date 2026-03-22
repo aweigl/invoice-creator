@@ -2,9 +2,12 @@
   "name": "invoice-creator-workspace",
   "private": true,
   "scripts": {
+    "build": "cd frontend && npm run build",
     "dev": "concurrently -k -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd backend && .venv/bin/uvicorn app.main:app --reload --reload-dir app --port 8000",
-    "dev:frontend": "cd frontend && npm run dev"
+    "dev:frontend": "cd frontend && npm run dev",
+    "start:prod": "cd backend && .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}",
+    "prod": "npm run build && npm run start:prod"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
