@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Any, cast
 
@@ -5,8 +6,11 @@ from jinja2 import Environment, FileSystemLoader
 from markupsafe import Markup, escape
 
 from app.config import DEFAULT_INVOICE_NOTES, SENDER_DETAILS
-from app.schemas import InvoiceRow
-from app.services.invoice_calculator import calculate_totals
+from app.schemas import PricingInvoiceDocument
+
+FONTCONFIG_CACHE_DIR = Path("/tmp/invoice-creator-fontconfig-cache")
+FONTCONFIG_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("XDG_CACHE_HOME", str(FONTCONFIG_CACHE_DIR))
 
 try:
     from weasyprint import HTML as WeasyHTML
@@ -28,8 +32,7 @@ def _format_money(currency: str, amount: object) -> str:
     return f"{currency} {amount}"
 
 
-def render_invoice_html(invoice: InvoiceRow) -> str:
-    totals = calculate_totals(invoice)
+def render_invoice_html(invoice: PricingInvoiceDocument) -> str:
     template = template_env.get_template("invoice.html")
 
     context: dict[str, Any] = {
@@ -47,23 +50,24 @@ def render_invoice_html(invoice: InvoiceRow) -> str:
         },
         "line_items": [
             {
-                "description": invoice.item_description,
-                "quantity": invoice.quantity,
-                "unit_price_display": _format_money(invoice.currency, invoice.unit_price),
-                "amount_display": _format_money(invoice.currency, totals.net_amount),
+                "description": item.description,
+                "quantity": item.quantity,
+                "unit_price_display": _format_money(invoice.currency, item.unit_price),
+                "amount_display": _format_money(invoice.currency, item.amount),
             }
+            for item in invoice.line_items
         ],
         "totals": {
-            "net_amount": _format_money(invoice.currency, totals.net_amount),
-            "tax_amount": _format_money(invoice.currency, totals.tax_amount),
-            "gross_amount": _format_money(invoice.currency, totals.gross_amount),
+            "net_amount": _format_money(invoice.currency, invoice.net_amount),
+            "tax_amount": _format_money(invoice.currency, invoice.tax_amount),
+            "gross_amount": _format_money(invoice.currency, invoice.gross_amount),
         },
         "notes": DEFAULT_INVOICE_NOTES,
     }
     return template.render(**context).strip()
 
 
-def render_invoice_pdf(invoice: InvoiceRow) -> bytes:
+def render_invoice_pdf(invoice: PricingInvoiceDocument) -> bytes:
     html_class = WeasyHTML
     if html_class is None:
         raise RuntimeError(

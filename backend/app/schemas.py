@@ -1,6 +1,6 @@
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -97,6 +97,29 @@ class PricingInvoiceCsvRow(BaseModel):
     currency: str = Field(min_length=3, max_length=3)
 
 
+class PricingInvoiceLineItem(BaseModel):
+    description: str
+    quantity: Decimal
+    unit_price: Decimal
+    amount: Decimal
+
+
+class PricingInvoiceDocument(BaseModel):
+    invoice_number: str
+    invoice_date: date
+    due_date: date
+    customer_name: str
+    customer_address: str
+    dog_name: str
+    billing_month: str
+    currency: str
+    tax_rate: Decimal
+    line_items: list[PricingInvoiceLineItem]
+    net_amount: Decimal
+    tax_amount: Decimal
+    gross_amount: Decimal
+
+
 class InvoiceTotals(BaseModel):
     net_amount: Decimal
     tax_amount: Decimal
@@ -125,4 +148,10 @@ class CsvValidationResult(BaseModel):
     valid_rows: int
     invalid_rows: int
     errors: list[CsvValidationError]
+    validated_rows: list[PricingInvoiceCsvRow] = Field(default_factory=list)
     sample_row: PricingInvoiceCsvRow | None = None
+
+
+class PricingRowsPayload(BaseModel):
+    filename: str = "bearbeitete-rechnungen.csv"
+    rows: list[dict[str, Any]]

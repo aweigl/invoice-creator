@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import ValidationError
 
 from app.config import SUPPORTED_CURRENCIES
@@ -20,7 +22,7 @@ REQUIRED_COLUMNS = {
 
 
 def validate_invoice_rows(
-    rows: list[dict[str, str]],
+    rows: list[dict[str, Any]],
     *,
     filename: str,
 ) -> CsvValidationResult:
@@ -45,6 +47,7 @@ def validate_invoice_rows(
             valid_rows=0,
             invalid_rows=len(rows),
             errors=errors,
+            validated_rows=[],
             sample_row=None,
         )
 
@@ -86,5 +89,6 @@ def validate_invoice_rows(
         valid_rows=len(valid_rows),
         invalid_rows=len(rows) - len(valid_rows),
         errors=errors,
+        validated_rows=valid_rows,
         sample_row=valid_rows[0] if valid_rows else None,
     )

@@ -9,9 +9,8 @@ Starter app for building a CSV-to-invoice workflow with:
 The current codebase is still a starter, but the project direction is now documented around a clear MVP:
 
 - user uploads a CSV
-- one row becomes one invoice
-- backend validates the file
-- app previews invoice data
+- user reviews and edits each row
+- backend validates the edited rows
 - backend generates one PDF per row
 - user downloads a ZIP
 
@@ -27,6 +26,19 @@ If your main goal is to learn FastAPI while building this product, start with th
 - `frontend`: Vue + TypeScript app powered by Vite
 - `backend`: FastAPI app
 - `docs`: product and architecture documentation
+- `sample-data`: example CSV files
+
+## Start Both Servers
+
+From the project root:
+
+```bash
+nvm use
+npm install
+npm run dev
+```
+
+This starts the frontend and backend together.
 
 ## Frontend
 
@@ -50,39 +62,25 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --reload-dir app --port 8000
 ```
 
 The backend runs on `http://localhost:8000`.
 
 The backend CORS setup accepts local frontend origins such as `localhost` and `127.0.0.1` on any port for development.
 
+## Current Workflow
+
+1. Upload a CSV file in the frontend.
+2. Edit the parsed rows before invoice creation.
+3. Validate the current row data against the backend pricing schema.
+4. Generate a ZIP containing one invoice PDF per valid row.
+
+The current CSV schema is shown in [sample-data/invoice-pricing-example.csv](/Users/aweigl/Desktop/Projects/invoice-creator/sample-data/invoice-pricing-example.csv).
+
 ## Current API
 
 - `GET /health`
-- `POST /api/invoices/preview`
-
-Example request:
-
-```json
-{
-  "customerName": "Acme GmbH",
-  "invoiceNumber": "INV-2026-001",
-  "items": [
-    {
-      "description": "Design work",
-      "quantity": 8,
-      "unitPrice": 75
-    }
-  ]
-}
-```
-
-## Planned MVP API
-
-The documented target API for the next iteration is:
-
-- `GET /health`
 - `POST /api/csv/validate`
-- `POST /api/invoices/preview`
+- `POST /api/invoices/validate-rows`
 - `POST /api/invoices/generate`

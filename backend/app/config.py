@@ -4,6 +4,17 @@ from decimal import Decimal
 SUPPORTED_CURRENCIES = {"EUR"}
 DEFAULT_CURRENCY = "EUR"
 DEFAULT_TAX_RATE = Decimal("19.00")
+MAX_CSV_BYTES = 2 * 1024 * 1024
+
+SUBSCRIPTION_PRICES = {
+    "none": Decimal("0.00"),
+    "1x_week": Decimal("120.00"),
+    "2x_week": Decimal("190.00"),
+    "3x_week": Decimal("290.00"),
+    "4x_week": Decimal("390.00"),
+}
+DAILY_PRICE = Decimal("35.00")
+TEST_RUN_PRICE = Decimal("20.00")
 
 SENDER_DETAILS = {
     "name": "FREILAUF Hundebetreuung",

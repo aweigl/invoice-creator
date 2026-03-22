@@ -22,13 +22,15 @@ import {
   TableRow
 } from '@/components/ui/table'
 
+type SubscriptionPlan = 'none' | '1x_week' | '2x_week' | '3x_week' | '4x_week'
+
 type CsvValidationError = {
   row_number: number
   column: string | null
   message: string
 }
 
-type CsvSampleRow = {
+type PricingRow = {
   invoice_number: string
   invoice_date: string
   due_date: string
@@ -36,10 +38,14 @@ type CsvSampleRow = {
   customer_address: string
   dog_name: string
   billing_month: string
-  subscription_plan: 'none' | '1x_week' | '2x_week' | '3x_week' | '4x_week'
-  daily_count: number
+  subscription_plan: SubscriptionPlan
+  daily_count: string
   include_test_run: boolean
   currency: string
+}
+
+type EditablePricingRow = PricingRow & {
+  uid: string
 }
 
 type CsvValidationResult = {
@@ -48,7 +54,26 @@ type CsvValidationResult = {
   valid_rows: number
   invalid_rows: number
   errors: CsvValidationError[]
-  sample_row: CsvSampleRow | null
+  validated_rows: Array<{
+    invoice_number: string
+    invoice_date: string
+    due_date: string
+    customer_name: string
+    customer_address: string
+    dog_name: string
+    billing_month: string
+    subscription_plan: SubscriptionPlan
+    daily_count: number
+    include_test_run: boolean
+    currency: string
+  }>
+  sample_row: PricingRow | null
+}
+
+type PreviewLineItem = {
+  label: string
+  detail: string
+  amount: number
 }
 
 const MAX_CSV_BYTES = 2 * 1024 * 1024
@@ -64,7 +89,26 @@ const REQUIRED_COLUMNS = [
   'daily_count',
   'include_test_run',
   'currency'
-]
+] as const
+
+const SUBSCRIPTION_PRICES: Record<SubscriptionPlan, number> = {
+  none: 0,
+  '1x_week': 120,
+  '2x_week': 190,
+  '3x_week': 290,
+  '4x_week': 390
+}
+
+const PLAN_LABELS: Record<SubscriptionPlan, string> = {
+  none: 'Kein Abo',
+  '1x_week': 'Abo 1x pro Woche',
+  '2x_week': 'Abo 2x pro Woche',
+  '3x_week': 'Abo 3x pro Woche',
+  '4x_week': 'Abo 4x pro Woche'
+}
+
+const DAILY_PRICE = 35
+const TEST_RUN_PRICE = 20
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -72,12 +116,47 @@ const selectedFileName = ref('')
 const csvContent = ref('')
 const localHeaders = ref<string[]>([])
 const localRowCount = ref(0)
+const editableRows = ref<EditablePricingRow[]>([])
+const validationResult = ref<CsvValidationResult | null>(null)
 const fileError = ref('')
 const serverError = ref('')
-const validationResult = ref<CsvValidationResult | null>(null)
-const isUploading = ref(false)
+const isValidating = ref(false)
+const isGenerating = ref(false)
+const lastValidatedSnapshot = ref('')
+const selectedRowUid = ref('')
+const generatedRowUids = ref<string[]>([])
 
-const hasFileInMemory = computed(() => csvContent.value.length > 0)
+const hasRows = computed(() => editableRows.value.length > 0)
+const generatedRowUidSet = computed(() => new Set(generatedRowUids.value))
+const selectedRowIndex = computed(() =>
+  editableRows.value.findIndex((row) => row.uid === selectedRowUid.value)
+)
+const selectedRow = computed(() =>
+  editableRows.value.find((row) => row.uid === selectedRowUid.value) ?? null
+)
+
+const currentRowsSnapshot = computed(() =>
+  JSON.stringify({
+    filename: selectedFileName.value || 'bearbeitete-rechnungen.csv',
+    rows: buildPayloadRows()
+  })
+)
+
+const validationIsCurrent = computed(
+  () =>
+    validationResult.value !== null &&
+    lastValidatedSnapshot.value.length > 0 &&
+    lastValidatedSnapshot.value === currentRowsSnapshot.value
+)
+
+const canGenerate = computed(
+  () =>
+    validationIsCurrent.value &&
+    validationResult.value !== null &&
+    validationResult.value.invalid_rows === 0 &&
+    hasRows.value &&
+    !isGenerating.value
+)
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) {
@@ -89,6 +168,13 @@ function formatBytes(bytes: number): string {
   }
 
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function formatEuro(amount: number): string {
+  return new Intl.NumberFormat('de-DE', {
+    style: 'currency',
+    currency: 'EUR'
+  }).format(amount)
 }
 
 function parseCsvLine(line: string): string[] {
@@ -123,24 +209,130 @@ function parseCsvLine(line: string): string[] {
   return values
 }
 
-function summarizeCsv(content: string) {
+function toBoolean(value: string): boolean {
+  return ['true', '1', 'ja', 'yes'].includes(value.trim().toLowerCase())
+}
+
+function isSubscriptionPlan(value: string): value is SubscriptionPlan {
+  return value in SUBSCRIPTION_PRICES
+}
+
+function parseCsvContent(content: string): { headers: string[]; rows: PricingRow[] } {
   const normalized = content.replace(/^\uFEFF/, '')
-  const rows = normalized
+  const lines = normalized
     .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
+    .filter((line) => line.trim().length > 0)
 
-  if (rows.length === 0) {
+  if (lines.length === 0) {
+    return { headers: [], rows: [] }
+  }
+
+  const headers = parseCsvLine(lines[0])
+  const rows = lines.slice(1).map((line) => {
+    const values = parseCsvLine(line)
+    const source = Object.fromEntries(headers.map((header, index) => [header, values[index] ?? '']))
+
     return {
-      headers: [],
-      rowCount: 0
+      invoice_number: String(source.invoice_number ?? ''),
+      invoice_date: String(source.invoice_date ?? ''),
+      due_date: String(source.due_date ?? ''),
+      customer_name: String(source.customer_name ?? ''),
+      customer_address: String(source.customer_address ?? ''),
+      dog_name: String(source.dog_name ?? ''),
+      billing_month: String(source.billing_month ?? ''),
+      subscription_plan: isSubscriptionPlan(String(source.subscription_plan ?? ''))
+        ? String(source.subscription_plan) as SubscriptionPlan
+        : 'none',
+      daily_count: String(source.daily_count ?? '0'),
+      include_test_run: toBoolean(String(source.include_test_run ?? 'false')),
+      currency: String(source.currency ?? 'EUR')
     }
+  })
+
+  return { headers, rows }
+}
+
+function createRowUid(index: number): string {
+  return `row-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function buildPayloadRows() {
+  return editableRows.value.map((row) => ({
+    invoice_number: row.invoice_number,
+    invoice_date: row.invoice_date,
+    due_date: row.due_date,
+    customer_name: row.customer_name,
+    customer_address: row.customer_address,
+    dog_name: row.dog_name,
+    billing_month: row.billing_month,
+    subscription_plan: row.subscription_plan,
+    daily_count: row.daily_count,
+    include_test_run: row.include_test_run,
+    currency: row.currency
+  }))
+}
+
+function validationErrorsForRow(rowIndex: number): CsvValidationError[] {
+  const targetRowNumber = rowIndex + 2
+  return validationResult.value?.errors.filter((error) => error.row_number === targetRowNumber) ?? []
+}
+
+function validationErrorsForField(rowIndex: number, field: keyof PricingRow): string[] {
+  return validationErrorsForRow(rowIndex)
+    .filter((error) => error.column === field)
+    .map((error) => error.message)
+}
+
+function rowHasErrors(rowIndex: number): boolean {
+  return validationErrorsForRow(rowIndex).length > 0
+}
+
+function previewLineItems(row: PricingRow): PreviewLineItem[] {
+  const items: PreviewLineItem[] = []
+  const dailyCount = Number.parseInt(row.daily_count || '0', 10)
+
+  if (row.subscription_plan !== 'none') {
+    items.push({
+      label: PLAN_LABELS[row.subscription_plan],
+      detail: `Abrechnungsmonat ${row.billing_month || 'offen'}`,
+      amount: SUBSCRIPTION_PRICES[row.subscription_plan]
+    })
   }
 
-  return {
-    headers: parseCsvLine(rows[0]),
-    rowCount: Math.max(rows.length - 1, 0)
+  if (!Number.isNaN(dailyCount) && dailyCount > 0) {
+    items.push({
+      label: 'Zusaetzliche Tagesbetreuung',
+      detail: `${dailyCount} Tag(e) x ${formatEuro(DAILY_PRICE)}`,
+      amount: dailyCount * DAILY_PRICE
+    })
   }
+
+  if (row.include_test_run) {
+    items.push({
+      label: 'Probetag',
+      detail: 'Einmalige Kennenlernleistung',
+      amount: TEST_RUN_PRICE
+    })
+  }
+
+  return items
+}
+
+function estimateTotal(row: PricingRow): number {
+  return previewLineItems(row).reduce((sum, item) => sum + item.amount, 0)
+}
+
+function markRowsDirty() {
+  serverError.value = ''
+}
+
+function markRowDirty() {
+  markRowsDirty()
+}
+
+function selectNextAvailableRow() {
+  const nextRow = editableRows.value.find((row) => !generatedRowUidSet.value.has(row.uid))
+  selectedRowUid.value = nextRow?.uid ?? ''
 }
 
 async function handleFileChange(event: Event) {
@@ -150,10 +342,14 @@ async function handleFileChange(event: Event) {
   fileError.value = ''
   serverError.value = ''
   validationResult.value = null
+  lastValidatedSnapshot.value = ''
   selectedFileName.value = ''
   csvContent.value = ''
   localHeaders.value = []
   localRowCount.value = 0
+  editableRows.value = []
+  selectedRowUid.value = ''
+  generatedRowUids.value = []
 
   if (!file) {
     return
@@ -172,32 +368,38 @@ async function handleFileChange(event: Event) {
   }
 
   const content = await file.text()
-  const summary = summarizeCsv(content)
+  const parsed = parseCsvContent(content)
 
   selectedFileName.value = file.name
   csvContent.value = content
-  localHeaders.value = summary.headers
-  localRowCount.value = summary.rowCount
+  localHeaders.value = parsed.headers
+  localRowCount.value = parsed.rows.length
+  editableRows.value = parsed.rows.map((row, index) => ({
+    uid: createRowUid(index),
+    ...row
+  }))
+  selectedRowUid.value = editableRows.value[0]?.uid ?? ''
 }
 
-async function validateCsv() {
-  if (!hasFileInMemory.value || !selectedFileName.value) {
-    fileError.value = 'Bitte waehle zuerst eine CSV-Datei aus.'
+async function validateRows() {
+  if (!hasRows.value) {
+    fileError.value = 'Bitte lade zuerst eine CSV-Datei mit Rechnungszeilen hoch.'
     return
   }
 
-  isUploading.value = true
+  isValidating.value = true
   serverError.value = ''
-  validationResult.value = null
 
   try {
-    const formData = new FormData()
-    const file = new File([csvContent.value], selectedFileName.value, { type: 'text/csv' })
-    formData.append('file', file)
-
-    const response = await fetch(`${apiBaseUrl}/api/csv/validate`, {
+    const response = await fetch(`${apiBaseUrl}/api/invoices/validate-rows`, {
       method: 'POST',
-      body: formData
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        filename: selectedFileName.value || 'bearbeitete-rechnungen.csv',
+        rows: buildPayloadRows()
+      })
     })
 
     if (!response.ok) {
@@ -206,11 +408,140 @@ async function validateCsv() {
     }
 
     validationResult.value = (await response.json()) as CsvValidationResult
+    lastValidatedSnapshot.value = currentRowsSnapshot.value
   } catch (error) {
+    validationResult.value = null
+    lastValidatedSnapshot.value = ''
     serverError.value =
       error instanceof Error ? error.message : 'Unbekannter Serverfehler.'
   } finally {
-    isUploading.value = false
+    isValidating.value = false
+  }
+}
+
+async function generateInvoices() {
+  if (!canGenerate.value) {
+    serverError.value = 'Bitte validiere die aktuellen Zeilen erfolgreich, bevor du PDFs erzeugst.'
+    return
+  }
+
+  isGenerating.value = true
+  serverError.value = ''
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/invoices/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        filename: selectedFileName.value || 'bearbeitete-rechnungen.csv',
+        rows: buildPayloadRows()
+      })
+    })
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { detail?: string } | null
+      throw new Error(payload?.detail ?? `PDF-Erstellung fehlgeschlagen (${response.status})`)
+    }
+
+    const blob = await response.blob()
+    const downloadUrl = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = downloadUrl
+    anchor.download = 'rechnungen.zip'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(downloadUrl)
+  } catch (error) {
+    serverError.value =
+      error instanceof Error ? error.message : 'Unbekannter Fehler bei der PDF-Erstellung.'
+  } finally {
+    isGenerating.value = false
+  }
+}
+
+function isRowGenerated(uid: string): boolean {
+  return generatedRowUidSet.value.has(uid)
+}
+
+function buildSingleRowPayload(row: EditablePricingRow) {
+  return {
+    filename: `${row.invoice_number || 'rechnung'}.csv`,
+    rows: [
+      {
+        invoice_number: row.invoice_number,
+        invoice_date: row.invoice_date,
+        due_date: row.due_date,
+        customer_name: row.customer_name,
+        customer_address: row.customer_address,
+        dog_name: row.dog_name,
+        billing_month: row.billing_month,
+        subscription_plan: row.subscription_plan,
+        daily_count: row.daily_count,
+        include_test_run: row.include_test_run,
+        currency: row.currency
+      }
+    ]
+  }
+}
+
+async function generateSelectedRowPdf() {
+  if (!selectedRow.value) {
+    serverError.value = 'Bitte waehle zuerst eine Rechnungszeile aus.'
+    return
+  }
+
+  if (isRowGenerated(selectedRow.value.uid)) {
+    serverError.value = 'Fuer diese Zeile wurde das PDF bereits erstellt.'
+    return
+  }
+
+  if (!validationIsCurrent.value) {
+    serverError.value = 'Bitte validiere die aktuellen Daten erneut, bevor du ein PDF erzeugst.'
+    return
+  }
+
+  if (rowHasErrors(selectedRowIndex.value)) {
+    serverError.value = 'Die ausgewaehlte Zeile enthaelt noch Validierungsfehler.'
+    return
+  }
+
+  isGenerating.value = true
+  serverError.value = ''
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/invoices/generate-single`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(buildSingleRowPayload(selectedRow.value))
+    })
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { detail?: string } | null
+      throw new Error(payload?.detail ?? `PDF-Erstellung fehlgeschlagen (${response.status})`)
+    }
+
+    const blob = await response.blob()
+    const downloadUrl = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = downloadUrl
+    anchor.download = `${selectedRow.value.invoice_number || 'rechnung'}.pdf`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(downloadUrl)
+
+    generatedRowUids.value = [...generatedRowUids.value, selectedRow.value.uid]
+    selectNextAvailableRow()
+  } catch (error) {
+    serverError.value =
+      error instanceof Error ? error.message : 'Unbekannter Fehler bei der PDF-Erstellung.'
+  } finally {
+    isGenerating.value = false
   }
 }
 </script>
@@ -218,44 +549,51 @@ async function validateCsv() {
 <template>
   <main class="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(255,214,153,0.28),transparent_28%),linear-gradient(135deg,#fffdf8_0%,#f6f8fb_52%,#eef6ef_100%)]">
     <div class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-8 md:py-10">
-      <section class="grid gap-4 lg:grid-cols-[1.5fr_0.8fr]">
-        <Card class="border-white/60 bg-white/85 shadow-lg backdrop-blur">
+      <section class="grid gap-4 lg:grid-cols-[1.45fr_0.85fr]">
+        <Card class="border-white/60 bg-white/88 shadow-lg backdrop-blur">
           <CardHeader>
             <Badge variant="outline" class="mb-3 w-fit bg-white/80">
-              CSV Upload
+              Validieren, bearbeiten, erzeugen
             </Badge>
             <CardTitle class="text-3xl tracking-tight md:text-5xl">
-              Rechnungsdaten hochladen und vor dem Generieren pruefen.
+              CSV hochladen, Zeilen pruefen und erst dann Rechnungs-PDFs erstellen.
             </CardTitle>
             <CardDescription class="max-w-2xl text-base text-slate-600">
-              Diese Ansicht liest die CSV zuerst im Browser ein, prueft die Dateigroesse
-              und schickt sie dann an FastAPI zur strukturierten Validierung.
+              Nach dem Upload kannst du jede Rechnungszeile bearbeiten. Erst wenn die
+              aktuelle Version fehlerfrei validiert ist, wird die ZIP-Datei mit allen
+              PDF-Rechnungen erzeugt.
             </CardDescription>
           </CardHeader>
         </Card>
 
-        <Card class="border-amber-200/70 bg-slate-950 text-slate-50 shadow-lg">
+        <Card class="border-slate-900/80 bg-slate-950 text-slate-50 shadow-lg">
           <CardHeader>
             <CardDescription class="text-slate-300">
-              Aktuelle Grenze
+              Workflow
             </CardDescription>
-            <CardTitle class="text-4xl">
-              {{ formatBytes(MAX_CSV_BYTES) }}
+            <CardTitle class="text-2xl">
+              1. CSV laden
+              <br>
+              2. Zeilen anpassen
+              <br>
+              3. Neu validieren
+              <br>
+              4. ZIP herunterladen
             </CardTitle>
           </CardHeader>
           <CardContent class="text-sm text-slate-300">
-            Die Datei wird fuer das MVP im Speicher gehalten. Dateien ueber diesem
-            Limit werden direkt vor dem Upload abgelehnt.
+            Dateigroesse im Browser: {{ formatBytes(MAX_CSV_BYTES) }}. Die aktuelle
+            Rechnungsfassung muss nach deinen Aenderungen erneut validiert werden.
           </CardContent>
         </Card>
       </section>
 
-      <section class="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+      <section class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <Card class="border-white/60 bg-white/88 shadow-lg backdrop-blur">
           <CardHeader>
-            <CardTitle>CSV-Datei auswaehlen</CardTitle>
+            <CardTitle>CSV-Datei laden</CardTitle>
             <CardDescription>
-              Erwartet wird das aktuelle Preismodell mit genau diesen Spalten.
+              Das aktuelle Preismodell erwartet genau diese Spalten.
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-6">
@@ -287,50 +625,34 @@ async function validateCsv() {
             </Alert>
 
             <Alert v-if="serverError" variant="destructive">
-              <AlertTitle>Validierung fehlgeschlagen</AlertTitle>
+              <AlertTitle>Serverfehler</AlertTitle>
               <AlertDescription>{{ serverError }}</AlertDescription>
             </Alert>
 
             <div
-              v-if="hasFileInMemory"
+              v-if="hasRows"
               class="grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-3"
             >
               <div>
-                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Datei
-                </p>
-                <p class="mt-1 text-sm font-medium text-slate-900">
-                  {{ selectedFileName }}
-                </p>
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Datei</p>
+                <p class="mt-1 text-sm font-medium text-slate-900">{{ selectedFileName }}</p>
               </div>
               <div>
-                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Gefundene Datenzeilen
-                </p>
-                <p class="mt-1 text-sm font-medium text-slate-900">
-                  {{ localRowCount }}
-                </p>
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Zeilen</p>
+                <p class="mt-1 text-sm font-medium text-slate-900">{{ localRowCount }}</p>
               </div>
               <div>
-                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Erkannte Spalten
-                </p>
-                <p class="mt-1 text-sm font-medium text-slate-900">
-                  {{ localHeaders.length }}
-                </p>
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Spalten</p>
+                <p class="mt-1 text-sm font-medium text-slate-900">{{ localHeaders.length }}</p>
               </div>
             </div>
 
             <div class="flex flex-wrap gap-3">
-              <Button :disabled="!hasFileInMemory || isUploading" @click="validateCsv">
-                {{ isUploading ? 'CSV wird validiert...' : 'CSV validieren' }}
+              <Button :disabled="!hasRows || isValidating" @click="validateRows">
+                {{ isValidating ? 'Zeilen werden validiert...' : 'Aktuelle Zeilen validieren' }}
               </Button>
-              <Button
-                variant="outline"
-                :disabled="!hasFileInMemory"
-                @click="validationResult = null"
-              >
-                Ergebnis ausblenden
+              <Button variant="outline" :disabled="!canGenerate" @click="generateInvoices">
+                {{ isGenerating ? 'PDFs werden erzeugt...' : 'PDF-Rechnungen als ZIP erzeugen' }}
               </Button>
             </div>
           </CardContent>
@@ -338,142 +660,382 @@ async function validateCsv() {
 
         <Card class="border-white/60 bg-white/88 shadow-lg backdrop-blur">
           <CardHeader>
-            <CardTitle>Lokale Schnellansicht</CardTitle>
+            <CardTitle>Validierungsstatus</CardTitle>
             <CardDescription>
-              Diese Werte werden direkt aus der Datei im Browser gelesen, noch bevor der
-              Server die eigentliche Validierung uebernimmt.
+              Bearbeitete Daten muessen erneut geprueft werden, bevor die PDF-Erstellung aktiv ist.
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
-            <div v-if="!hasFileInMemory" class="rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500">
-              Noch keine CSV geladen.
+            <div v-if="!validationResult" class="rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500">
+              Noch keine Validierung ausgefuehrt.
             </div>
 
             <template v-else>
-              <div>
-                <p class="mb-2 text-sm font-semibold text-slate-900">Spaltenkopf</p>
-                <div class="flex flex-wrap gap-2">
-                  <Badge
-                    v-for="header in localHeaders"
-                    :key="header"
-                    variant="outline"
-                  >
-                    {{ header }}
-                  </Badge>
+              <div class="grid gap-4 md:grid-cols-3">
+                <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Gesamt</p>
+                  <p class="mt-2 text-2xl font-semibold text-slate-900">{{ validationResult.total_rows }}</p>
+                </div>
+                <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                  <p class="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">Gueltig</p>
+                  <p class="mt-2 text-2xl font-semibold text-emerald-900">{{ validationResult.valid_rows }}</p>
+                </div>
+                <div class="rounded-xl border border-rose-200 bg-rose-50 p-4">
+                  <p class="text-xs font-semibold uppercase tracking-[0.16em] text-rose-700">Fehlerhaft</p>
+                  <p class="mt-2 text-2xl font-semibold text-rose-900">{{ validationResult.invalid_rows }}</p>
                 </div>
               </div>
 
-              <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                Die Datei wird im Speicher gehalten, damit wir die Groesse sofort pruefen
-                und den Upload nur bei sinnvollen CSV-Dateien starten.
+              <Alert
+                :variant="validationResult.invalid_rows > 0 ? 'destructive' : 'default'"
+                :class="validationResult.invalid_rows === 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-950' : ''"
+              >
+                <AlertTitle>
+                  {{
+                    validationIsCurrent
+                      ? validationResult.invalid_rows === 0
+                        ? 'Aktuelle Zeilen sind gueltig'
+                        : 'Aktuelle Zeilen enthalten Fehler'
+                      : 'Validierung ist veraltet'
+                  }}
+                </AlertTitle>
+                <AlertDescription>
+                  {{
+                    validationIsCurrent
+                      ? validationResult.invalid_rows === 0
+                        ? 'Du kannst jetzt einzelne PDFs oder die gesamte ZIP-Datei erzeugen.'
+                        : 'Bitte korrigiere die markierten Felder und validiere erneut.'
+                      : 'Seit der letzten Validierung wurden Werte geaendert. Bitte erneut pruefen.'
+                  }}
+                </AlertDescription>
+              </Alert>
+
+              <div v-if="validationResult.errors.length > 0" class="overflow-hidden rounded-xl border border-slate-200">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead class="w-24">Zeile</TableHead>
+                      <TableHead class="w-40">Spalte</TableHead>
+                      <TableHead>Fehler</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow
+                      v-for="error in validationResult.errors"
+                      :key="`${error.row_number}-${error.column}-${error.message}`"
+                    >
+                      <TableCell>{{ error.row_number }}</TableCell>
+                      <TableCell>{{ error.column ?? 'Allgemein' }}</TableCell>
+                      <TableCell>{{ error.message }}</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
               </div>
             </template>
           </CardContent>
         </Card>
       </section>
 
-      <section v-if="validationResult" class="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <Card class="border-white/60 bg-white/88 shadow-lg backdrop-blur">
-          <CardHeader>
-            <CardTitle>Validierungsergebnis</CardTitle>
-            <CardDescription>
-              Rueckmeldung vom FastAPI-Endpunkt fuer {{ validationResult.filename }}
-            </CardDescription>
-          </CardHeader>
-          <CardContent class="space-y-4">
-            <div class="grid gap-4 md:grid-cols-3">
-              <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Gesamtzeilen
-                </p>
-                <p class="mt-2 text-2xl font-semibold text-slate-900">
-                  {{ validationResult.total_rows }}
-                </p>
-              </div>
-              <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
-                  Gueltig
-                </p>
-                <p class="mt-2 text-2xl font-semibold text-emerald-900">
-                  {{ validationResult.valid_rows }}
-                </p>
-              </div>
-              <div class="rounded-xl border border-rose-200 bg-rose-50 p-4">
-                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-rose-700">
-                  Ungueltig
-                </p>
-                <p class="mt-2 text-2xl font-semibold text-rose-900">
-                  {{ validationResult.invalid_rows }}
-                </p>
-              </div>
-            </div>
-
-            <Alert
-              :variant="validationResult.invalid_rows > 0 ? 'destructive' : 'default'"
-              :class="validationResult.invalid_rows === 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-950' : ''"
-            >
-              <AlertTitle>
-                {{ validationResult.invalid_rows === 0 ? 'CSV ist valide' : 'CSV enthaelt Fehler' }}
-              </AlertTitle>
-              <AlertDescription>
-                {{
-                  validationResult.invalid_rows === 0
-                    ? 'Die Datei passt zum aktuellen Preismodell und kann als naechstes fuer Rechnungen verwendet werden.'
-                    : 'Bitte korrigiere die markierten Zeilen oder Spalten, bevor wir Rechnungen erzeugen.'
-                }}
-              </AlertDescription>
-            </Alert>
-
-            <div v-if="validationResult.sample_row" class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p class="mb-3 text-sm font-semibold text-slate-900">Erste gueltige Beispielzeile</p>
-              <div class="grid gap-3 text-sm md:grid-cols-2">
-                <div><span class="font-medium">Rechnungsnummer:</span> {{ validationResult.sample_row.invoice_number }}</div>
-                <div><span class="font-medium">Hund:</span> {{ validationResult.sample_row.dog_name }}</div>
-                <div><span class="font-medium">Abo:</span> {{ validationResult.sample_row.subscription_plan }}</div>
-                <div><span class="font-medium">Tagesbetreuung:</span> {{ validationResult.sample_row.daily_count }}</div>
-                <div><span class="font-medium">Probetag:</span> {{ validationResult.sample_row.include_test_run ? 'Ja' : 'Nein' }}</div>
-                <div><span class="font-medium">Monat:</span> {{ validationResult.sample_row.billing_month }}</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <section v-if="hasRows" class="space-y-4">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <h2 class="text-2xl font-semibold tracking-tight text-slate-950">Einzelne Rechnungszeile bearbeiten</h2>
+            <p class="text-sm text-slate-600">
+              Waehle eine Zeile aus. Bereits erzeugte PDFs werden im Auswahlfeld deaktiviert.
+            </p>
+          </div>
+          <Badge variant="outline" class="bg-white/80">
+            {{ editableRows.length }} Zeile(n) · {{ generatedRowUids.length }} PDF(s) erzeugt
+          </Badge>
+        </div>
 
         <Card class="border-white/60 bg-white/88 shadow-lg backdrop-blur">
           <CardHeader>
-            <CardTitle>Fehlerliste</CardTitle>
-            <CardDescription>
-              Zeilenbezogene Fehler aus der Backend-Validierung.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div class="overflow-hidden rounded-xl border border-slate-200">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead class="w-28">Zeile</TableHead>
-                    <TableHead class="w-40">Spalte</TableHead>
-                    <TableHead>Fehlermeldung</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow v-if="validationResult.errors.length === 0">
-                    <TableCell colspan="3" class="py-8 text-center text-slate-500">
-                      Keine Fehler gefunden.
-                    </TableCell>
-                  </TableRow>
-                  <TableRow
-                    v-for="error in validationResult.errors"
-                    :key="`${error.row_number}-${error.column}-${error.message}`"
+            <div class="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+              <div class="space-y-2">
+                <Label for="row-select">Rechnungszeile auswaehlen</Label>
+                <select
+                  id="row-select"
+                  v-model="selectedRowUid"
+                  class="border-input bg-background flex h-10 w-full rounded-md border px-3 py-2 text-sm shadow-xs"
+                >
+                  <option
+                    v-for="(row, index) in editableRows"
+                    :key="row.uid"
+                    :value="row.uid"
+                    :disabled="isRowGenerated(row.uid)"
                   >
-                    <TableCell>{{ error.row_number }}</TableCell>
-                    <TableCell>{{ error.column ?? 'Allgemein' }}</TableCell>
-                    <TableCell>{{ error.message }}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+                    Zeile {{ index + 2 }} · {{ row.invoice_number || 'Ohne Rechnungsnummer' }} · {{ row.customer_name || 'Ohne Kundenname' }}{{ isRowGenerated(row.uid) ? ' · PDF erstellt' : '' }}
+                  </option>
+                </select>
+              </div>
+              <Button
+                variant="outline"
+                :disabled="!selectedRow || isGenerating || (selectedRow ? isRowGenerated(selectedRow.uid) : true)"
+                @click="generateSelectedRowPdf"
+              >
+                {{
+                  isGenerating
+                    ? 'PDF wird erzeugt...'
+                    : selectedRow && isRowGenerated(selectedRow.uid)
+                      ? 'PDF bereits erstellt'
+                      : 'PDF fuer diese Zeile erzeugen'
+                }}
+              </Button>
             </div>
-          </CardContent>
+          </CardHeader>
         </Card>
+
+        <div v-if="selectedRow" class="grid gap-5">
+          <Card class="border-white/60 bg-white/88 shadow-lg backdrop-blur">
+            <CardHeader class="gap-4 md:flex-row md:items-start md:justify-between">
+              <div>
+                <CardTitle class="text-xl">
+                  Zeile {{ selectedRowIndex + 2 }} · {{ selectedRow.invoice_number || 'Ohne Rechnungsnummer' }}
+                </CardTitle>
+                <CardDescription>
+                  {{ selectedRow.customer_name || 'Ohne Kundenname' }} · {{ selectedRow.dog_name || 'Ohne Hundename' }}
+                </CardDescription>
+              </div>
+              <Badge :variant="isRowGenerated(selectedRow.uid) ? 'secondary' : rowHasErrors(selectedRowIndex) ? 'destructive' : 'secondary'">
+                {{
+                  isRowGenerated(selectedRow.uid)
+                    ? 'PDF bereits erstellt'
+                    : rowHasErrors(selectedRowIndex)
+                      ? 'Fehler vorhanden'
+                      : 'Ohne Fehlerhinweis'
+                }}
+              </Badge>
+            </CardHeader>
+            <CardContent class="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
+              <div class="grid gap-4 md:grid-cols-2">
+                <div class="space-y-2">
+                  <Label for="invoice-number-selected">Rechnungsnummer</Label>
+                  <Input
+                    id="invoice-number-selected"
+                    v-model="selectedRow.invoice_number"
+                    @update:model-value="markRowDirty"
+                  />
+                  <p
+                    v-for="message in validationErrorsForField(selectedRowIndex, 'invoice_number')"
+                    :key="message"
+                    class="text-xs text-rose-600"
+                  >
+                    {{ message }}
+                  </p>
+                </div>
+
+                <div class="space-y-2">
+                  <Label for="billing-month-selected">Abrechnungsmonat</Label>
+                  <Input
+                    id="billing-month-selected"
+                    v-model="selectedRow.billing_month"
+                    type="month"
+                    @update:model-value="markRowDirty"
+                  />
+                  <p
+                    v-for="message in validationErrorsForField(selectedRowIndex, 'billing_month')"
+                    :key="message"
+                    class="text-xs text-rose-600"
+                  >
+                    {{ message }}
+                  </p>
+                </div>
+
+                <div class="space-y-2">
+                  <Label for="invoice-date-selected">Rechnungsdatum</Label>
+                  <Input
+                    id="invoice-date-selected"
+                    v-model="selectedRow.invoice_date"
+                    type="date"
+                    @update:model-value="markRowDirty"
+                  />
+                  <p
+                    v-for="message in validationErrorsForField(selectedRowIndex, 'invoice_date')"
+                    :key="message"
+                    class="text-xs text-rose-600"
+                  >
+                    {{ message }}
+                  </p>
+                </div>
+
+                <div class="space-y-2">
+                  <Label for="due-date-selected">Faelligkeitsdatum</Label>
+                  <Input
+                    id="due-date-selected"
+                    v-model="selectedRow.due_date"
+                    type="date"
+                    @update:model-value="markRowDirty"
+                  />
+                  <p
+                    v-for="message in validationErrorsForField(selectedRowIndex, 'due_date')"
+                    :key="message"
+                    class="text-xs text-rose-600"
+                  >
+                    {{ message }}
+                  </p>
+                </div>
+
+                <div class="space-y-2">
+                  <Label for="customer-name-selected">Kundenname</Label>
+                  <Input
+                    id="customer-name-selected"
+                    v-model="selectedRow.customer_name"
+                    @update:model-value="markRowDirty"
+                  />
+                  <p
+                    v-for="message in validationErrorsForField(selectedRowIndex, 'customer_name')"
+                    :key="message"
+                    class="text-xs text-rose-600"
+                  >
+                    {{ message }}
+                  </p>
+                </div>
+
+                <div class="space-y-2">
+                  <Label for="dog-name-selected">Hundename</Label>
+                  <Input
+                    id="dog-name-selected"
+                    v-model="selectedRow.dog_name"
+                    @update:model-value="markRowDirty"
+                  />
+                  <p
+                    v-for="message in validationErrorsForField(selectedRowIndex, 'dog_name')"
+                    :key="message"
+                    class="text-xs text-rose-600"
+                  >
+                    {{ message }}
+                  </p>
+                </div>
+
+                <div class="space-y-2">
+                  <Label for="subscription-plan-selected">Abo-Modell</Label>
+                  <select
+                    id="subscription-plan-selected"
+                    v-model="selectedRow.subscription_plan"
+                    class="border-input bg-background flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs"
+                    @change="markRowDirty"
+                  >
+                    <option value="none">Kein Abo</option>
+                    <option value="1x_week">1x pro Woche</option>
+                    <option value="2x_week">2x pro Woche</option>
+                    <option value="3x_week">3x pro Woche</option>
+                    <option value="4x_week">4x pro Woche</option>
+                  </select>
+                  <p
+                    v-for="message in validationErrorsForField(selectedRowIndex, 'subscription_plan')"
+                    :key="message"
+                    class="text-xs text-rose-600"
+                  >
+                    {{ message }}
+                  </p>
+                </div>
+
+                <div class="space-y-2">
+                  <Label for="daily-count-selected">Zusaetzliche Tagesbetreuung</Label>
+                  <Input
+                    id="daily-count-selected"
+                    v-model="selectedRow.daily_count"
+                    type="number"
+                    min="0"
+                    @update:model-value="markRowDirty"
+                  />
+                  <p
+                    v-for="message in validationErrorsForField(selectedRowIndex, 'daily_count')"
+                    :key="message"
+                    class="text-xs text-rose-600"
+                  >
+                    {{ message }}
+                  </p>
+                </div>
+
+                <div class="space-y-2">
+                  <Label for="currency-selected">Waehrung</Label>
+                  <Input
+                    id="currency-selected"
+                    v-model="selectedRow.currency"
+                    maxlength="3"
+                    @update:model-value="markRowDirty"
+                  />
+                  <p
+                    v-for="message in validationErrorsForField(selectedRowIndex, 'currency')"
+                    :key="message"
+                    class="text-xs text-rose-600"
+                  >
+                    {{ message }}
+                  </p>
+                </div>
+
+                <div class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 md:col-span-2">
+                  <input
+                    id="test-run-selected"
+                    v-model="selectedRow.include_test_run"
+                    type="checkbox"
+                    class="h-4 w-4 rounded border-slate-300"
+                    @change="markRowDirty"
+                  >
+                  <Label for="test-run-selected">Probetag berechnen</Label>
+                </div>
+
+                <div class="space-y-2 md:col-span-2">
+                  <Label for="customer-address-selected">Kundenadresse</Label>
+                  <textarea
+                    id="customer-address-selected"
+                    v-model="selectedRow.customer_address"
+                    class="border-input bg-background min-h-24 w-full rounded-md border px-3 py-2 text-sm shadow-xs"
+                    @input="markRowDirty"
+                  />
+                  <p
+                    v-for="message in validationErrorsForField(selectedRowIndex, 'customer_address')"
+                    :key="message"
+                    class="text-xs text-rose-600"
+                  >
+                    {{ message }}
+                  </p>
+                </div>
+              </div>
+
+              <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Vorschau der Leistungspositionen
+                </p>
+                <div class="mt-4 space-y-3">
+                  <div
+                    v-for="item in previewLineItems(selectedRow)"
+                    :key="`${item.label}-${item.detail}`"
+                    class="rounded-xl border border-white bg-white p-3 shadow-sm"
+                  >
+                    <div class="flex items-start justify-between gap-3">
+                      <div>
+                        <p class="font-medium text-slate-950">{{ item.label }}</p>
+                        <p class="text-sm text-slate-600">{{ item.detail }}</p>
+                      </div>
+                      <p class="font-semibold text-slate-950">{{ formatEuro(item.amount) }}</p>
+                    </div>
+                  </div>
+
+                  <div
+                    v-if="previewLineItems(selectedRow).length === 0"
+                    class="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500"
+                  >
+                    Noch keine abrechenbare Position vorhanden.
+                  </div>
+                </div>
+
+                <div class="mt-4 rounded-xl bg-slate-950 px-4 py-3 text-slate-50">
+                  <p class="text-xs uppercase tracking-[0.16em] text-slate-300">Netto geschaetzt</p>
+                  <p class="mt-1 text-2xl font-semibold">{{ formatEuro(estimateTotal(selectedRow)) }}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+        <div
+          v-else
+          class="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-8 text-center text-sm text-slate-600"
+        >
+          Alle aktuell ausgewaehlten Zeilen wurden bereits als PDF erzeugt.
+        </div>
       </section>
     </div>
   </main>
