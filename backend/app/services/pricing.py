@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from typing import cast
 
@@ -9,13 +10,16 @@ from app.schemas import (
     quantize_money,
 )
 
-
 SUBSCRIPTION_LABELS = {
     "1x_week": "Abo Hundebetreuung 1x pro Woche",
     "2x_week": "Abo Hundebetreuung 2x pro Woche",
     "3x_week": "Abo Hundebetreuung 3x pro Woche",
     "4x_week": "Abo Hundebetreuung 4x pro Woche",
 }
+
+
+def _format_billing_month(value: str) -> str:
+    return date.fromisoformat(f"{value}-01").strftime("%m.%Y")
 
 
 def build_line_items(row: PricingInvoiceCsvRow) -> list[PricingInvoiceLineItem]:
@@ -26,8 +30,8 @@ def build_line_items(row: PricingInvoiceCsvRow) -> list[PricingInvoiceLineItem]:
         items.append(
             PricingInvoiceLineItem(
                 description=(
-                    f"{SUBSCRIPTION_LABELS[row.subscription_plan]} "
-                    f"({row.billing_month})"
+                    f"{SUBSCRIPTION_LABELS[row.subscription_plan].format(dog_name=row.dog_name)} "
+                    f"({_format_billing_month(row.billing_month)})"
                 ),
                 quantity=Decimal("1"),
                 unit_price=subscription_price,

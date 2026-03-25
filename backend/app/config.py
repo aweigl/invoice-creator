@@ -3,7 +3,7 @@ from decimal import Decimal
 
 SUPPORTED_CURRENCIES = {"EUR"}
 DEFAULT_CURRENCY = "EUR"
-DEFAULT_TAX_RATE = Decimal("19.00")
+DEFAULT_TAX_RATE = Decimal("0.00")
 MAX_CSV_BYTES = 2 * 1024 * 1024
 
 SUBSCRIPTION_PRICES = {
@@ -25,4 +25,4 @@ SENDER_DETAILS = {
     "logo_url": "https://image.jimcdn.com/app/cms/image/transf/dimension=380x10000:format=png/path/s9385516516d8a0fa/image/i8cba35488dec94d5/version/1770131785/image.png",
 }
 
-DEFAULT_INVOICE_NOTES = "Vielen Dank fuer dein Vertrauen."
+DEFAULT_INVOICE_NOTES = "Bitte überweisen Sie den Rechnungsbetrag bis spätestens {{invoice.due_date}}"

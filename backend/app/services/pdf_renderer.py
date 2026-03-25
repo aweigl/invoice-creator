@@ -32,6 +32,16 @@ def _format_money(currency: str, amount: object) -> str:
     return f"{currency} {amount}"
 
 
+def _format_date(value: object) -> str:
+    if hasattr(value, "strftime"):
+        return value.strftime("%d.%m.%Y")
+    return str(value)
+
+
+def _render_template_string(value: str, context: dict[str, Any]) -> str:
+    return template_env.from_string(value).render(**context).strip()
+
+
 def render_invoice_html(invoice: PricingInvoiceDocument) -> str:
     template = template_env.get_template("invoice.html")
 
@@ -44,8 +54,9 @@ def render_invoice_html(invoice: PricingInvoiceDocument) -> str:
         },
         "invoice": {
             "invoice_number": invoice.invoice_number,
-            "invoice_date": invoice.invoice_date.isoformat(),
-            "due_date": invoice.due_date.isoformat(),
+            "invoice_date": _format_date(invoice.invoice_date),
+            "due_date": _format_date(invoice.due_date),
+            "dog_name": invoice.dog_name,
             "tax_rate": invoice.tax_rate,
         },
         "line_items": [
@@ -62,8 +73,8 @@ def render_invoice_html(invoice: PricingInvoiceDocument) -> str:
             "tax_amount": _format_money(invoice.currency, invoice.tax_amount),
             "gross_amount": _format_money(invoice.currency, invoice.gross_amount),
         },
-        "notes": DEFAULT_INVOICE_NOTES,
     }
+    context["notes"] = _render_template_string(DEFAULT_INVOICE_NOTES, context)
     return template.render(**context).strip()
 
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -101,10 +101,10 @@ const SUBSCRIPTION_PRICES: Record<SubscriptionPlan, number> = {
 
 const PLAN_LABELS: Record<SubscriptionPlan, string> = {
   none: 'Kein Abo',
-  '1x_week': 'Abo 1x pro Woche',
-  '2x_week': 'Abo 2x pro Woche',
-  '3x_week': 'Abo 3x pro Woche',
-  '4x_week': 'Abo 4x pro Woche'
+  '1x_week': 'Abholung Gruppenspaziergang und Heimbringen {dog_name} von/zu Ihrem Haus in Köln (Abo 1x pro Woche)',
+  '2x_week': 'Abholung Gruppenspaziergang und Heimbringen {dog_name} von/zu Ihrem Haus in Köln (2x pro Woche)',
+  '3x_week': 'Abholung Gruppenspaziergang und Heimbringen {dog_name} von/zu Ihrem Haus in Köln (3x pro Woche)',
+  '4x_week': 'Abholung Gruppenspaziergang und Heimbringen {dog_name} von/zu Ihrem Haus in Köln (4x pro Woche)'
 }
 
 const DAILY_PRICE = 35
@@ -122,9 +122,11 @@ const fileError = ref('')
 const serverError = ref('')
 const isValidating = ref(false)
 const isGenerating = ref(false)
+const isPreviewLoading = ref(false)
 const lastValidatedSnapshot = ref('')
 const selectedRowUid = ref('')
 const generatedRowUids = ref<string[]>([])
+const previewError = ref('')
 
 const hasRows = computed(() => editableRows.value.length > 0)
 const generatedRowUidSet = computed(() => new Set(generatedRowUids.value))
@@ -177,6 +179,22 @@ function formatEuro(amount: number): string {
   }).format(amount)
 }
 
+function formatGermanMonth(value: string): string {
+  if (!value) {
+    return 'offen'
+  }
+
+  const date = new Date(`${value}-01T00:00:00`)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('de-DE', {
+    month: '2-digit',
+    year: 'numeric'
+  }).format(date)
+}
+
 function parseCsvLine(line: string): string[] {
   const values: string[] = []
   let current = ''
@@ -215,6 +233,10 @@ function toBoolean(value: string): boolean {
 
 function isSubscriptionPlan(value: string): value is SubscriptionPlan {
   return value in SUBSCRIPTION_PRICES
+}
+
+function subscriptionLabel(row: PricingRow): string {
+  return PLAN_LABELS[row.subscription_plan].replace('{dog_name}', row.dog_name || 'Hund')
 }
 
 function parseCsvContent(content: string): { headers: string[]; rows: PricingRow[] } {
@@ -293,8 +315,8 @@ function previewLineItems(row: PricingRow): PreviewLineItem[] {
 
   if (row.subscription_plan !== 'none') {
     items.push({
-      label: PLAN_LABELS[row.subscription_plan],
-      detail: `Abrechnungsmonat ${row.billing_month || 'offen'}`,
+      label: subscriptionLabel(row),
+      detail: `Abrechnungsmonat ${formatGermanMonth(row.billing_month)}`,
       amount: SUBSCRIPTION_PRICES[row.subscription_plan]
     })
   }
@@ -324,6 +346,7 @@ function estimateTotal(row: PricingRow): number {
 
 function markRowsDirty() {
   serverError.value = ''
+  previewError.value = ''
 }
 
 function markRowDirty() {
@@ -350,6 +373,7 @@ async function handleFileChange(event: Event) {
   editableRows.value = []
   selectedRowUid.value = ''
   generatedRowUids.value = []
+  previewError.value = ''
 
   if (!file) {
     return
@@ -544,6 +568,81 @@ async function generateSelectedRowPdf() {
     isGenerating.value = false
   }
 }
+
+async function loadSelectedRowPreview() {
+  previewError.value = ''
+
+  if (!selectedRow.value) {
+    previewError.value = 'Bitte waehle zuerst eine Rechnungszeile fuer die PDF-Vorschau aus.'
+    return
+  }
+
+  if (!validationIsCurrent.value) {
+    previewError.value = 'Bitte validiere die aktuellen Daten erneut, bevor du die PDF-Vorschau laedst.'
+    return
+  }
+
+  if (rowHasErrors(selectedRowIndex.value)) {
+    previewError.value = 'Die ausgewaehlte Zeile enthaelt noch Validierungsfehler.'
+    return
+  }
+
+  const previewWindow = window.open('', '_blank')
+  if (!previewWindow) {
+    previewError.value = 'Bitte erlaube Pop-ups, damit die PDF-Vorschau in einem neuen Tab geoeffnet werden kann.'
+    return
+  }
+
+  previewWindow.opener = null
+  previewWindow.document.write(`
+    <!doctype html>
+    <html lang="de">
+      <head>
+        <meta charset="utf-8">
+        <title>PDF-Vorschau</title>
+      </head>
+      <body style="font-family: sans-serif; padding: 24px;">
+        PDF-Vorschau wird geladen...
+      </body>
+    </html>
+  `)
+  previewWindow.document.close()
+
+  isPreviewLoading.value = true
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/invoices/generate-single`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(buildSingleRowPayload(selectedRow.value))
+    })
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { detail?: string } | null
+      throw new Error(payload?.detail ?? `PDF-Vorschau fehlgeschlagen (${response.status})`)
+    }
+
+    const blob = await response.blob()
+    const previewUrl = URL.createObjectURL(blob)
+
+    previewWindow.location.href = previewUrl
+    window.setTimeout(() => {
+      URL.revokeObjectURL(previewUrl)
+    }, 60_000)
+  } catch (error) {
+    previewWindow.close()
+    previewError.value =
+      error instanceof Error ? error.message : 'Unbekannter Fehler bei der PDF-Vorschau.'
+  } finally {
+    isPreviewLoading.value = false
+  }
+}
+
+watch(selectedRowUid, () => {
+  previewError.value = ''
+})
 </script>
 
 <template>
@@ -751,7 +850,7 @@ async function generateSelectedRowPdf() {
 
         <Card class="border-white/60 bg-white/88 shadow-lg backdrop-blur">
           <CardHeader>
-            <div class="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+            <div class="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
               <div class="space-y-2">
                 <Label for="row-select">Rechnungszeile auswaehlen</Label>
                 <select
@@ -770,6 +869,13 @@ async function generateSelectedRowPdf() {
                 </select>
               </div>
               <Button
+                variant="secondary"
+                :disabled="!selectedRow || isPreviewLoading"
+                @click="loadSelectedRowPreview"
+              >
+                {{ isPreviewLoading ? 'Vorschau wird geladen...' : 'PDF-Vorschau laden' }}
+              </Button>
+              <Button
                 variant="outline"
                 :disabled="!selectedRow || isGenerating || (selectedRow ? isRowGenerated(selectedRow.uid) : true)"
                 @click="generateSelectedRowPdf"
@@ -785,6 +891,11 @@ async function generateSelectedRowPdf() {
             </div>
           </CardHeader>
         </Card>
+
+        <Alert v-if="previewError" variant="destructive">
+          <AlertTitle>Vorschau nicht verfuegbar</AlertTitle>
+          <AlertDescription>{{ previewError }}</AlertDescription>
+        </Alert>
 
         <div v-if="selectedRow" class="grid gap-5">
           <Card class="border-white/60 bg-white/88 shadow-lg backdrop-blur">
@@ -1029,6 +1140,7 @@ async function generateSelectedRowPdf() {
               </div>
             </CardContent>
           </Card>
+
         </div>
         <div
           v-else
