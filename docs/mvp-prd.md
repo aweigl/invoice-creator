@@ -88,9 +88,9 @@ The first version should use a required, fixed schema.
 ### Example CSV
 
 ```csv
-invoice_number,invoice_date,due_date,customer_name,customer_address,item_description,quantity,unit_price,tax_rate,currency
-INV-2026-001,2026-03-22,2026-04-05,Acme GmbH,"Musterstrasse 1, 10115 Berlin",Design work,8,75.00,19,EUR
-INV-2026-002,2026-03-22,2026-04-05,Globex AG,"Hauptstrasse 5, 20095 Hamburg",Consulting,4,120.00,19,EUR
+invoice_number;invoice_date;due_date;customer_name;customer_address;item_description;quantity;unit_price;tax_rate;currency
+INV-2026-001;2026-03-22;2026-04-05;Acme GmbH;Musterstrasse 1, 10115 Berlin;Design work;8;75.00;19;EUR
+INV-2026-002;2026-03-22;2026-04-05;Globex AG;Hauptstrasse 5, 20095 Hamburg;Consulting;4;120.00;19;EUR
 ```
 
 ## Validation Rules

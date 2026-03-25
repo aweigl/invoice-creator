@@ -102,7 +102,7 @@ After the frontend build exists, FastAPI serves the built app from `frontend/dis
 3. Validate the current row data against the backend pricing schema.
 4. Generate a ZIP containing one invoice PDF per valid row.
 
-The current CSV schema is shown in [sample-data/invoice-pricing-example.csv](/Users/aweigl/Desktop/Projects/invoice-creator/sample-data/invoice-pricing-example.csv).
+The current CSV schema is shown in [sample-data/invoice-pricing-example.csv](/Users/aweigl/Desktop/Projects/invoice-creator/sample-data/invoice-pricing-example.csv). The sample uses semicolons as the CSV separator.
 
 ## Railway
 

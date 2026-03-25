@@ -21,7 +21,7 @@ def _parse_daily_dates(value: str) -> list[date]:
     parts = [part.strip() for part in raw_parts]
     if any(not part for part in parts):
         raise ValueError(
-            "daily_dates must be a comma-separated list of ISO dates without empty values."
+            "daily_dates must be a list of ISO dates separated by commas within the field, without empty values."
         )
 
     parsed_dates: list[date] = []

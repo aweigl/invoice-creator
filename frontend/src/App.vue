@@ -116,6 +116,7 @@ const PLAN_LABELS: Record<SubscriptionPlan, string> = {
 const DAILY_PRICE = 35
 const DAILY_PRICE_REBATED = 30
 const TEST_RUN_PRICE = 20
+const CSV_DELIMITERS = [';', ','] as const
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -247,7 +248,26 @@ function formatGermanDateList(value: string): string {
   return `${formattedDates.slice(0, -1).join(', ')} und ${formattedDates[formattedDates.length - 1]}`
 }
 
-function parseCsvLine(line: string): string[] {
+function detectCsvDelimiter(content: string): string {
+  const firstNonEmptyLine = content
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/)
+    .find((line) => line.trim().length > 0)
+
+  if (!firstNonEmptyLine) {
+    return ';'
+  }
+
+  const delimiterCounts = CSV_DELIMITERS.map((delimiter) => ({
+    delimiter,
+    count: firstNonEmptyLine.split(delimiter).length - 1
+  }))
+  const bestMatch = delimiterCounts.sort((left, right) => right.count - left.count)[0]
+
+  return bestMatch && bestMatch.count > 0 ? bestMatch.delimiter : ';'
+}
+
+function parseCsvLine(line: string, delimiter: string): string[] {
   const values: string[] = []
   let current = ''
   let inQuotes = false
@@ -266,7 +286,7 @@ function parseCsvLine(line: string): string[] {
       continue
     }
 
-    if (character === ',' && !inQuotes) {
+    if (character === delimiter && !inQuotes) {
       values.push(current.trim())
       current = ''
       continue
@@ -293,6 +313,7 @@ function subscriptionLabel(row: PricingRow): string {
 
 function parseCsvContent(content: string): { headers: string[]; rows: PricingRow[] } {
   const normalized = content.replace(/^\uFEFF/, '')
+  const delimiter = detectCsvDelimiter(normalized)
   const lines = normalized
     .split(/\r?\n/)
     .filter((line) => line.trim().length > 0)
@@ -301,9 +322,9 @@ function parseCsvContent(content: string): { headers: string[]; rows: PricingRow
     return { headers: [], rows: [] }
   }
 
-  const headers = parseCsvLine(lines[0])
+  const headers = parseCsvLine(lines[0], delimiter)
   const rows = lines.slice(1).map((line) => {
-    const values = parseCsvLine(line)
+    const values = parseCsvLine(line, delimiter)
     const source = Object.fromEntries(headers.map((header, index) => [header, values[index] ?? '']))
 
     return {

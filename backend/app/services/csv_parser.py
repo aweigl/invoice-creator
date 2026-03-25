@@ -6,6 +6,22 @@ class CsvParseError(ValueError):
     pass
 
 
+def detect_csv_delimiter(content: str) -> str:
+    sample_lines = [line for line in content.splitlines() if line.strip()]
+    sample = "\n".join(sample_lines[:5])
+
+    if not sample:
+        return ";"
+
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=";,")
+    except csv.Error:
+        first_line = sample_lines[0] if sample_lines else ""
+        return ";" if first_line.count(";") >= first_line.count(",") else ","
+
+    return dialect.delimiter
+
+
 def decode_csv_content(raw_bytes: bytes) -> str:
     try:
         return raw_bytes.decode("utf-8-sig")
@@ -18,7 +34,7 @@ def parse_csv_rows(content: str) -> list[dict[str, str]]:
         raise CsvParseError("CSV file is empty.")
 
     stream = io.StringIO(content, newline="")
-    reader = csv.DictReader(stream)
+    reader = csv.DictReader(stream, delimiter=detect_csv_delimiter(content))
 
     if reader.fieldnames is None:
         raise CsvParseError("CSV file must include a header row.")
