@@ -2,7 +2,13 @@ from datetime import date
 from decimal import Decimal
 from typing import cast
 
-from app.config import DAILY_PRICE, DEFAULT_TAX_RATE, SUBSCRIPTION_PRICES, TEST_RUN_PRICE
+from app.config import (
+    DAILY_PRICE,
+    DAILY_PRICE_REBATED,
+    DEFAULT_TAX_RATE,
+    SUBSCRIPTION_PRICES,
+    TEST_RUN_PRICE,
+)
 from app.schemas import (
     PricingInvoiceCsvRow,
     PricingInvoiceDocument,
@@ -41,12 +47,13 @@ def build_line_items(row: PricingInvoiceCsvRow) -> list[PricingInvoiceLineItem]:
 
     if row.daily_count > 0:
         quantity = Decimal(str(row.daily_count))
+        daily_price = DAILY_PRICE_REBATED if row.daily_count_rebate else DAILY_PRICE
         items.append(
             PricingInvoiceLineItem(
-                description=f"Zusaetzliche Tagesbetreuung fuer {row.dog_name}",
+                description=f"Gassiservice für {row.dog_name}",
                 quantity=quantity,
-                unit_price=DAILY_PRICE,
-                amount=quantize_money(quantity * DAILY_PRICE),
+                unit_price=daily_price,
+                amount=quantize_money(quantity * daily_price),
             )
         )
 

@@ -93,6 +93,7 @@ class PricingInvoiceCsvRow(BaseModel):
     billing_month: str = Field(pattern=r"^\d{4}-\d{2}$")
     subscription_plan: Literal["none", "1x_week", "2x_week", "3x_week", "4x_week"]
     daily_count: int = Field(ge=0)
+    daily_count_rebate: bool = False
     include_test_run: bool
     currency: str = Field(min_length=3, max_length=3)
 

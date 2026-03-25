@@ -20,6 +20,10 @@ REQUIRED_COLUMNS = {
     "currency",
 }
 
+OPTIONAL_COLUMNS_WITH_DEFAULTS = {
+    "daily_count_rebate": False,
+}
+
 
 def validate_invoice_rows(
     rows: list[dict[str, Any]],
@@ -53,7 +57,9 @@ def validate_invoice_rows(
 
     for index, row in enumerate(rows, start=2):
         try:
-            invoice_row = PricingInvoiceCsvRow.model_validate(row)
+            invoice_row = PricingInvoiceCsvRow.model_validate(
+                {**OPTIONAL_COLUMNS_WITH_DEFAULTS, **row}
+            )
         except ValidationError as exc:
             for issue in exc.errors():
                 location = issue.get("loc", ())

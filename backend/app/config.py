@@ -14,6 +14,7 @@ SUBSCRIPTION_PRICES = {
     "4x_week": Decimal("390.00"),
 }
 DAILY_PRICE = Decimal("35.00")
+DAILY_PRICE_REBATED = Decimal("30.00")
 TEST_RUN_PRICE = Decimal("20.00")
 
 SENDER_DETAILS = {

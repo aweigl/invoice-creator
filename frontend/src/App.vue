@@ -40,6 +40,7 @@ type PricingRow = {
   billing_month: string
   subscription_plan: SubscriptionPlan
   daily_count: string
+  daily_count_rebate: boolean
   include_test_run: boolean
   currency: string
 }
@@ -64,6 +65,7 @@ type CsvValidationResult = {
     billing_month: string
     subscription_plan: SubscriptionPlan
     daily_count: number
+    daily_count_rebate: boolean
     include_test_run: boolean
     currency: string
   }>
@@ -87,6 +89,7 @@ const REQUIRED_COLUMNS = [
   'billing_month',
   'subscription_plan',
   'daily_count',
+  'daily_count_rebate',
   'include_test_run',
   'currency'
 ] as const
@@ -108,6 +111,7 @@ const PLAN_LABELS: Record<SubscriptionPlan, string> = {
 }
 
 const DAILY_PRICE = 35
+const DAILY_PRICE_REBATED = 30
 const TEST_RUN_PRICE = 20
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -266,6 +270,7 @@ function parseCsvContent(content: string): { headers: string[]; rows: PricingRow
         ? String(source.subscription_plan) as SubscriptionPlan
         : 'none',
       daily_count: String(source.daily_count ?? '0'),
+      daily_count_rebate: toBoolean(String(source.daily_count_rebate ?? 'false')),
       include_test_run: toBoolean(String(source.include_test_run ?? 'false')),
       currency: String(source.currency ?? 'EUR')
     }
@@ -289,6 +294,7 @@ function buildPayloadRows() {
     billing_month: row.billing_month,
     subscription_plan: row.subscription_plan,
     daily_count: row.daily_count,
+    daily_count_rebate: row.daily_count_rebate,
     include_test_run: row.include_test_run,
     currency: row.currency
   }))
@@ -312,6 +318,7 @@ function rowHasErrors(rowIndex: number): boolean {
 function previewLineItems(row: PricingRow): PreviewLineItem[] {
   const items: PreviewLineItem[] = []
   const dailyCount = Number.parseInt(row.daily_count || '0', 10)
+  const dailyPrice = row.daily_count_rebate ? DAILY_PRICE_REBATED : DAILY_PRICE
 
   if (row.subscription_plan !== 'none') {
     items.push({
@@ -324,8 +331,8 @@ function previewLineItems(row: PricingRow): PreviewLineItem[] {
   if (!Number.isNaN(dailyCount) && dailyCount > 0) {
     items.push({
       label: 'Zusaetzliche Tagesbetreuung',
-      detail: `${dailyCount} Tag(e) x ${formatEuro(DAILY_PRICE)}`,
-      amount: dailyCount * DAILY_PRICE
+      detail: `${dailyCount} Tag(e) x ${formatEuro(dailyPrice)}${row.daily_count_rebate ? ' · Rabatt' : ''}`,
+      amount: dailyCount * dailyPrice
     })
   }
 
@@ -504,6 +511,7 @@ function buildSingleRowPayload(row: EditablePricingRow) {
         billing_month: row.billing_month,
         subscription_plan: row.subscription_plan,
         daily_count: row.daily_count,
+        daily_count_rebate: row.daily_count_rebate,
         include_test_run: row.include_test_run,
         currency: row.currency
       }
@@ -1058,6 +1066,17 @@ watch(selectedRowUid, () => {
                   >
                     {{ message }}
                   </p>
+                </div>
+
+                <div class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                  <input
+                    id="daily-count-rebate-selected"
+                    v-model="selectedRow.daily_count_rebate"
+                    type="checkbox"
+                    class="h-4 w-4 rounded border-slate-300"
+                    @change="markRowDirty"
+                  >
+                  <Label for="daily-count-rebate-selected">Tagesbetreuung-Rabatt (30 statt 35)</Label>
                 </div>
 
                 <div class="space-y-2">
