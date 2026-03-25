@@ -21,6 +21,7 @@ REQUIRED_COLUMNS = {
 }
 
 OPTIONAL_COLUMNS_WITH_DEFAULTS = {
+    "daily_dates": "",
     "daily_count_rebate": False,
 }
 

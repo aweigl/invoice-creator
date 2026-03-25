@@ -21,8 +21,11 @@ SENDER_DETAILS = {
     "name": "FREILAUF Hundebetreuung",
     "address": "Am Schmidtgrund 112, 50765 Köln",
     "email": "mail@freilauf-hunde.de",
-    "tax_id": "DE123456789",
+    "tax_id": "217/5312/4843",
     "phone": "+49 163 3682 007",
+    'bank_name': "Commerzbank",
+    "iban": "DE98 3704 0044 0377 6515 00",
+    'bic': "COBADEBBXXX",
     "logo_url": "https://image.jimcdn.com/app/cms/image/transf/dimension=380x10000:format=png/path/s9385516516d8a0fa/image/i8cba35488dec94d5/version/1770131785/image.png",
 }
 

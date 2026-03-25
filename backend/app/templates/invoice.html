@@ -28,7 +28,7 @@
       }
 
       .logo {
-        height: 50px;
+        height: 75px;
         display: block;
         margin-bottom: 8px;
       }
@@ -80,6 +80,12 @@
         text-align: right;
       }
 
+      .line-item-detail {
+        margin-top: 2px;
+        font-size: 12px;
+        color: #666;
+      }
+
       .totals {
         width: 40%;
         float: right;
@@ -98,26 +104,25 @@
         page-break-inside: avoid;
       }
 
-      .sender-details,
       .bank-info {
-        width: 48%;
-      }
-
-      .bank-info {
-        text-align: right;
+        align-self: flex-end;
       }
 
       .notes {
         clear: both;
-        text-align: center;
-        margin-bottom: 1.5cm;
         font-weight: bold;
+        margin-bottom: 16px;
       }
 
+      .taxes-info,
       .info {
         clear: both;
-        text-align: center;
         margin-bottom: 16px;
+      }
+
+      .greeting {
+        margin-bottom: 1.5cm;
+        text-align: left;
       }
     </style>
   </head>
@@ -136,7 +141,6 @@
         <div class="invoice-title">Rechnung</div>
         <div><strong>Rechnungsnr.:</strong> {{ invoice.invoice_number }}</div>
         <div><strong>Datum:</strong> {{ invoice.invoice_date }}</div>
-        <div><strong>Fällig am:</strong> {{ invoice.due_date }}</div>
       </div>
     </div>
 
@@ -161,7 +165,12 @@
         {% for item in line_items %}
         <tr>
           <td>{{ loop.index }}</td>
-          <td>{{ item.description }}</td>
+          <td>
+            <div>{{ item.description }}</div>
+            {% if item.detail %}
+            <div class="line-item-detail">{{ item.detail }}</div>
+            {% endif %}
+          </td>
           <td class="number-cell">{{ item.quantity }}</td>
           <td class="number-cell">{{ item.unit_price_display }}</td>
           <td class="number-cell">{{ item.amount_display }}</td>
@@ -200,13 +209,30 @@
     <div class="notes">{{ notes }}</div>
     {% endif %}
 
+    <div class="taxes-info">
+      Nach §19 Abs. 1 UStG wird keine Umsatzsteuer berechnet.
+    </div>
+
+    <div class="greeting">
+      Mit freundlichen Grüßen,<br />
+      Lisa Weber
+    </div>
+
     <div class="bottom-container">
       <div class="sender-details">
         <strong>{{ sender.name }}</strong><br />
+        Lisa Weber<br />
         {{ sender.address | nl2br }}<br /><br />
         Steuernummer: {{ sender.tax_id }}<br />
         {% if sender.phone %}Telefon: {{ sender.phone }}<br />{% endif %} Email:
         {{ sender.email }}
+      </div>
+      <div class="bank-info">
+        <strong>Bankdaten:</strong><br />
+        Bank: {{ sender.bank_name }}
+        <br />
+        IBAN: {{ sender.iban }}<br />
+        BIC: {{ sender.bic }}
       </div>
     </div>
   </body>

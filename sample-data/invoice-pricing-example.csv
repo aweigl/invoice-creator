@@ -1,6 +1,6 @@
-invoice_number,invoice_date,due_date,customer_name,customer_address,dog_name,billing_month,subscription_plan,daily_count,daily_count_rebate,include_test_run,currency
-INV-2026-03-001,2026-03-31,2026-04-07,Anna Becker,"Musterweg 12, 50823 Koeln",Balu,2026-03,1x_week,0,false,false,EUR
-INV-2026-03-002,2026-03-31,2026-04-07,Jonas Klein,"Lindenstrasse 8, 50667 Koeln",Mila,2026-03,2x_week,2,true,false,EUR
-INV-2026-03-003,2026-03-31,2026-04-07,Sarah Neumann,"Aachener Strasse 101, 50931 Koeln",Lotte,2026-03,none,3,false,false,EUR
-INV-2026-03-004,2026-03-31,2026-04-07,David Schmitz,"Venloer Strasse 42, 50825 Koeln",Bruno,2026-03,none,0,false,true,EUR
-INV-2026-03-005,2026-03-31,2026-04-07,Lea Hoffmann,"Subbelrather Strasse 77, 50823 Koeln",Nala,2026-03,4x_week,1,true,true,EUR
+invoice_number,invoice_date,due_date,customer_name,customer_address,dog_name,billing_month,subscription_plan,daily_count,daily_dates,daily_count_rebate,include_test_run,currency
+INV-2026-03-001,2026-03-31,2026-04-07,Anna Becker,"Musterweg 12, 50823 Koeln",Balu,2026-03,1x_week,0,"",false,false,EUR
+INV-2026-03-002,2026-03-31,2026-04-07,Jonas Klein,"Lindenstrasse 8, 50667 Koeln",Mila,2026-03,2x_week,2,"2026-03-05,2026-03-12",true,false,EUR
+INV-2026-03-003,2026-03-31,2026-04-07,Sarah Neumann,"Aachener Strasse 101, 50931 Koeln",Lotte,2026-03,none,3,"2026-03-03,2026-03-10,2026-03-17",false,false,EUR
+INV-2026-03-004,2026-03-31,2026-04-07,David Schmitz,"Venloer Strasse 42, 50825 Koeln",Bruno,2026-03,none,0,"",false,true,EUR
+INV-2026-03-005,2026-03-31,2026-04-07,Lea Hoffmann,"Subbelrather Strasse 77, 50823 Koeln",Nala,2026-03,4x_week,1,"2026-03-28",true,true,EUR

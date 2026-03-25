@@ -40,6 +40,7 @@ type PricingRow = {
   billing_month: string
   subscription_plan: SubscriptionPlan
   daily_count: string
+  daily_dates: string
   daily_count_rebate: boolean
   include_test_run: boolean
   currency: string
@@ -65,6 +66,7 @@ type CsvValidationResult = {
     billing_month: string
     subscription_plan: SubscriptionPlan
     daily_count: number
+    daily_dates: string
     daily_count_rebate: boolean
     include_test_run: boolean
     currency: string
@@ -89,6 +91,7 @@ const REQUIRED_COLUMNS = [
   'billing_month',
   'subscription_plan',
   'daily_count',
+  'daily_dates',
   'daily_count_rebate',
   'include_test_run',
   'currency'
@@ -199,6 +202,51 @@ function formatGermanMonth(value: string): string {
   }).format(date)
 }
 
+function formatGermanDate(value: string): string {
+  if (!value) {
+    return value
+  }
+
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('de-DE').format(date)
+}
+
+function parseDailyDates(value: string): string[] {
+  const normalized = value.trim()
+  if (!normalized) {
+    return []
+  }
+
+  const parts = normalized.split(',').map((part) => part.trim())
+  if (parts.some((part) => part.length === 0)) {
+    return []
+  }
+
+  return parts
+}
+
+function formatGermanDateList(value: string): string {
+  const parsedDates = parseDailyDates(value)
+  if (parsedDates.length === 0) {
+    return value.trim()
+  }
+
+  const formattedDates = parsedDates.map((entry) => formatGermanDate(entry))
+  if (formattedDates.length === 1) {
+    return formattedDates[0]
+  }
+
+  if (formattedDates.length === 2) {
+    return `${formattedDates[0]} und ${formattedDates[1]}`
+  }
+
+  return `${formattedDates.slice(0, -1).join(', ')} und ${formattedDates[formattedDates.length - 1]}`
+}
+
 function parseCsvLine(line: string): string[] {
   const values: string[] = []
   let current = ''
@@ -270,6 +318,7 @@ function parseCsvContent(content: string): { headers: string[]; rows: PricingRow
         ? String(source.subscription_plan) as SubscriptionPlan
         : 'none',
       daily_count: String(source.daily_count ?? '0'),
+      daily_dates: String(source.daily_dates ?? ''),
       daily_count_rebate: toBoolean(String(source.daily_count_rebate ?? 'false')),
       include_test_run: toBoolean(String(source.include_test_run ?? 'false')),
       currency: String(source.currency ?? 'EUR')
@@ -294,6 +343,7 @@ function buildPayloadRows() {
     billing_month: row.billing_month,
     subscription_plan: row.subscription_plan,
     daily_count: row.daily_count,
+    daily_dates: row.daily_dates,
     daily_count_rebate: row.daily_count_rebate,
     include_test_run: row.include_test_run,
     currency: row.currency
@@ -329,9 +379,10 @@ function previewLineItems(row: PricingRow): PreviewLineItem[] {
   }
 
   if (!Number.isNaN(dailyCount) && dailyCount > 0) {
+    const formattedDates = formatGermanDateList(row.daily_dates)
     items.push({
       label: 'Zusaetzliche Tagesbetreuung',
-      detail: `${dailyCount} Tag(e) x ${formatEuro(dailyPrice)}${row.daily_count_rebate ? ' · Rabatt' : ''}`,
+      detail: `${dailyCount} Tag(e) x ${formatEuro(dailyPrice)}${row.daily_count_rebate ? ' · Rabatt' : ''}${formattedDates ? ` · am ${formattedDates}` : ''}`,
       amount: dailyCount * dailyPrice
     })
   }
@@ -511,6 +562,7 @@ function buildSingleRowPayload(row: EditablePricingRow) {
         billing_month: row.billing_month,
         subscription_plan: row.subscription_plan,
         daily_count: row.daily_count,
+        daily_dates: row.daily_dates,
         daily_count_rebate: row.daily_count_rebate,
         include_test_run: row.include_test_run,
         currency: row.currency
@@ -1068,7 +1120,27 @@ watch(selectedRowUid, () => {
                   </p>
                 </div>
 
-                <div class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <div class="space-y-2 md:col-span-2">
+                  <Label for="daily-dates-selected">Tagesbetreuung Termine</Label>
+                  <Input
+                    id="daily-dates-selected"
+                    v-model="selectedRow.daily_dates"
+                    placeholder="2026-03-03,2026-03-10,2026-03-17"
+                    @update:model-value="markRowDirty"
+                  />
+                  <p class="text-xs text-slate-500">
+                    Kommagetrennte ISO-Daten, z. B. 2026-03-03,2026-03-10
+                  </p>
+                  <p
+                    v-for="message in validationErrorsForField(selectedRowIndex, 'daily_dates')"
+                    :key="message"
+                    class="text-xs text-rose-600"
+                  >
+                    {{ message }}
+                  </p>
+                </div>
+
+                <div class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 md:col-span-2">
                   <input
                     id="daily-count-rebate-selected"
                     v-model="selectedRow.daily_count_rebate"
@@ -1076,7 +1148,7 @@ watch(selectedRowUid, () => {
                     class="h-4 w-4 rounded border-slate-300"
                     @change="markRowDirty"
                   >
-                  <Label for="daily-count-rebate-selected">Tagesbetreuung-Rabatt (30 statt 35)</Label>
+                  <Label for="daily-count-rebate-selected">Tagesbetreuung-Rabatt fuer alle Termine (30 statt 35)</Label>
                 </div>
 
                 <div class="space-y-2">

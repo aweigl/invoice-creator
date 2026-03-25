@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 
 TWOPLACES = Decimal("0.01")
@@ -10,6 +10,30 @@ TWOPLACES = Decimal("0.01")
 
 def quantize_money(value: Decimal) -> Decimal:
     return value.quantize(TWOPLACES, rounding=ROUND_HALF_UP)
+
+
+def _parse_daily_dates(value: str) -> list[date]:
+    normalized = value.strip()
+    if not normalized:
+        return []
+
+    raw_parts = normalized.split(",")
+    parts = [part.strip() for part in raw_parts]
+    if any(not part for part in parts):
+        raise ValueError(
+            "daily_dates must be a comma-separated list of ISO dates without empty values."
+        )
+
+    parsed_dates: list[date] = []
+    for part in parts:
+        try:
+            parsed_dates.append(date.fromisoformat(part))
+        except ValueError as exc:
+            raise ValueError(
+                "daily_dates must contain valid ISO dates in YYYY-MM-DD format."
+            ) from exc
+
+    return parsed_dates
 
 
 class InvoiceItem(BaseModel):
@@ -93,13 +117,53 @@ class PricingInvoiceCsvRow(BaseModel):
     billing_month: str = Field(pattern=r"^\d{4}-\d{2}$")
     subscription_plan: Literal["none", "1x_week", "2x_week", "3x_week", "4x_week"]
     daily_count: int = Field(ge=0)
+    daily_dates: str = Field(default="", validate_default=True)
     daily_count_rebate: bool = False
     include_test_run: bool
     currency: str = Field(min_length=3, max_length=3)
 
+    @field_validator("daily_dates", mode="before")
+    @classmethod
+    def normalize_daily_dates(cls, value: object) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value.strip()
+        return str(value).strip()
+
+    @field_validator("daily_dates")
+    @classmethod
+    def validate_daily_dates(cls, value: str, info: ValidationInfo) -> str:
+        daily_count = int(info.data.get("daily_count", 0))
+        parsed_dates = _parse_daily_dates(value)
+
+        if daily_count == 0:
+            if parsed_dates:
+                raise ValueError(
+                    "daily_dates must be empty when daily_count is 0."
+                )
+            return ""
+
+        if not parsed_dates:
+            raise ValueError(
+                "Please provide daily_dates when daily_count is greater than 0."
+            )
+
+        if len(parsed_dates) != daily_count:
+            raise ValueError(
+                "daily_count must exactly match the number of dates in daily_dates."
+            )
+
+        return ",".join(parsed_date.isoformat() for parsed_date in parsed_dates)
+
+    @property
+    def parsed_daily_dates(self) -> list[date]:
+        return _parse_daily_dates(self.daily_dates)
+
 
 class PricingInvoiceLineItem(BaseModel):
     description: str
+    detail: str | None = None
     quantity: Decimal
     unit_price: Decimal
     amount: Decimal

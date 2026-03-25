@@ -62,6 +62,7 @@ def render_invoice_html(invoice: PricingInvoiceDocument) -> str:
         "line_items": [
             {
                 "description": item.description,
+                "detail": item.detail,
                 "quantity": item.quantity,
                 "unit_price_display": _format_money(invoice.currency, item.unit_price),
                 "amount_display": _format_money(invoice.currency, item.amount),

@@ -28,6 +28,17 @@ def _format_billing_month(value: str) -> str:
     return date.fromisoformat(f"{value}-01").strftime("%m.%Y")
 
 
+def _format_german_date_list(values: list[date]) -> str:
+    formatted = [value.strftime("%d.%m.%Y") for value in values]
+    if not formatted:
+        return ""
+    if len(formatted) == 1:
+        return formatted[0]
+    if len(formatted) == 2:
+        return f"{formatted[0]} und {formatted[1]}"
+    return f"{', '.join(formatted[:-1])} und {formatted[-1]}"
+
+
 def build_line_items(row: PricingInvoiceCsvRow) -> list[PricingInvoiceLineItem]:
     items: list[PricingInvoiceLineItem] = []
 
@@ -51,6 +62,7 @@ def build_line_items(row: PricingInvoiceCsvRow) -> list[PricingInvoiceLineItem]:
         items.append(
             PricingInvoiceLineItem(
                 description=f"Gassiservice für {row.dog_name}",
+                detail=f"am {_format_german_date_list(row.parsed_daily_dates)}",
                 quantity=quantity,
                 unit_price=daily_price,
                 amount=quantize_money(quantity * daily_price),
@@ -60,7 +72,7 @@ def build_line_items(row: PricingInvoiceCsvRow) -> list[PricingInvoiceLineItem]:
     if row.include_test_run:
         items.append(
             PricingInvoiceLineItem(
-                description=f"Probetag fuer {row.dog_name}",
+                description=f"Probetag für {row.dog_name}",
                 quantity=Decimal("1"),
                 unit_price=TEST_RUN_PRICE,
                 amount=TEST_RUN_PRICE,
