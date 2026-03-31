@@ -104,7 +104,7 @@ After the frontend build exists, FastAPI serves the built app from `frontend/dis
 
 The current CSV schema is shown in [sample-data/invoice-pricing-example.csv](/Users/aweigl/Desktop/Projects/invoice-creator/sample-data/invoice-pricing-example.csv). The sample uses semicolons as the CSV separator.
 
-## Railway
+## Docker
 
 The repository now includes a root [Dockerfile](/Users/aweigl/Desktop/Projects/invoice-creator/Dockerfile) that:
 
@@ -112,7 +112,41 @@ The repository now includes a root [Dockerfile](/Users/aweigl/Desktop/Projects/i
 2. installs the Python backend and WeasyPrint system dependencies
 3. serves the built frontend through FastAPI
 
-This lets Railway deploy the repo as a single service.
+This lets the app run as a single container for platforms like Coolify or Railway.
+
+To test it locally:
+
+```bash
+docker build -t invoice-creator .
+docker run --rm -p 8000:8000 invoice-creator
+```
+
+Or with Compose:
+
+```bash
+docker compose up --build
+```
+
+Then open `http://localhost:8000`.
+
+## Coolify
+
+Use the repo as a Dockerfile-based application or a Compose-based application.
+
+Recommended setup in Coolify:
+
+1. Select the repository and choose the root [Dockerfile](/Users/aweigl/Desktop/Projects/invoice-creator/Dockerfile).
+2. Set the container port to `8000`.
+3. Keep the default start command from the image.
+4. No persistent volume is required for the current app.
+
+If you prefer Docker Compose in Coolify, point it at [docker-compose.yml](/Users/aweigl/Desktop/Projects/invoice-creator/docker-compose.yml).
+
+The container has a built-in health check that calls `GET /health`, which matches the existing app health endpoint.
+
+## Railway
+
+The same [Dockerfile](/Users/aweigl/Desktop/Projects/invoice-creator/Dockerfile) also works for Railway, and the existing [railway.json](/Users/aweigl/Desktop/Projects/invoice-creator/railway.json) still points Railway at that image build.
 
 ## Current API
 
