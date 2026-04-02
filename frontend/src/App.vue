@@ -91,10 +91,14 @@ const selectedDailyDates = computed(() =>
   selectedRow.value ? parseDailyDates(selectedRow.value.daily_dates) : [],
 );
 const selectedPendingDailyDate = computed(() =>
-  selectedRow.value ? (pendingDailyDateByRow.value[selectedRow.value.uid] ?? "") : "",
+  selectedRow.value
+    ? (pendingDailyDateByRow.value[selectedRow.value.uid] ?? "")
+    : "",
 );
 const selectedDailyDateInputError = computed(() =>
-  selectedRow.value ? (dailyDateInputErrorByRow.value[selectedRow.value.uid] ?? "") : "",
+  selectedRow.value
+    ? (dailyDateInputErrorByRow.value[selectedRow.value.uid] ?? "")
+    : "",
 );
 const isResolvingSelectedRowDistance = computed(
   () =>
@@ -325,7 +329,8 @@ function syncDailyDatesForRow(row: EditablePricingRow, dates: string[]) {
 }
 
 function clearDailyDateInputError(uid: string) {
-  const { [uid]: _removed, ...remainingErrors } = dailyDateInputErrorByRow.value;
+  const { [uid]: _removed, ...remainingErrors } =
+    dailyDateInputErrorByRow.value;
   dailyDateInputErrorByRow.value = remainingErrors;
 }
 
@@ -845,6 +850,10 @@ async function validateRows(nextStepOnSuccess: WorkflowStep | null = null) {
     validationResult.value = (await response.json()) as CsvValidationResult;
     lastValidatedSnapshot.value = currentRowsSnapshot.value;
 
+    if (validationResult.value.invalid_rows > 0) {
+      return false;
+    }
+
     if (nextStepOnSuccess) {
       currentStep.value = nextStepOnSuccess;
     }
@@ -1260,7 +1269,6 @@ watch(
   },
   { immediate: true },
 );
-
 </script>
 
 <template>
@@ -1275,7 +1283,7 @@ watch(
       >
         <div class="flex justify-between">
           <div>
-            <img src="/logo.png" alt="Logo" class="h-30 w-auto" />
+            <img src="/logo.png" alt="Logo" class="h-42 w-auto" />
           </div>
           <div class="space-y-4">
             <Badge
@@ -1394,7 +1402,7 @@ watch(
         :on-resolve-address="resolveSelectedRowAddressDistance"
         :on-select-row-at="selectRowAt"
         :on-toggle-advanced="toggleAdvancedOptions"
-        :on-validate="() => validateRows()"
+        :on-validate="validateRows"
         :preview-error="previewError"
         :preview-items="selectedRowPreviewItems"
         :pending-daily-date="selectedPendingDailyDate"

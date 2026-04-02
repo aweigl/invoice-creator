@@ -36,9 +36,10 @@ import type {
   CsvValidationResult,
   EditablePricingRow,
   PreviewLineItem,
+  WorkflowStep,
 } from "@/lib/invoice-workflow";
 
-defineProps<{
+const props = defineProps<{
   rows: EditablePricingRow[];
   selectedRow: EditablePricingRow | null;
   selectedRowIndex: number;
@@ -64,7 +65,7 @@ defineProps<{
   onPrevious: () => void;
   onNext: () => void;
   onToggleAdvanced: () => void;
-  onValidate: () => void;
+  onValidate: (nextStepOnSuccess?: WorkflowStep | null) => Promise<boolean>;
   onPreview: () => void;
   onGenerateSingle: () => void;
   onResolveAddress: () => void;
@@ -90,6 +91,20 @@ defineProps<{
   formatKilometers: (value: number) => string;
   formatCoordinate: (value: number) => string;
 }>();
+
+const handleFormValidation = async () => {
+  const isValid = await props.onValidate();
+
+  if (!isValid) {
+    const element = document.getElementById("error_card");
+    element
+      ? element.scrollIntoView({ behavior: "smooth", block: "start" })
+      : window.scrollTo({ top: 350, behavior: "smooth" });
+    return;
+  }
+
+  props.onOpenDownload();
+};
 </script>
 
 <template>
@@ -105,92 +120,45 @@ defineProps<{
           >
             Schritt 2
           </Badge>
-          <div>
-            <CardTitle class="text-3xl leading-tight md:text-4xl">
-              Eine Rechnung nach der anderen in Ruhe pruefen.
-            </CardTitle>
-            <CardDescription
-              class="mt-2 max-w-3xl text-base leading-7 text-slate-600"
-            >
-              Die wichtigsten Angaben stehen direkt vorne. Alles Weitere bleibt
-              unter den erweiterten Optionen verborgen.
-            </CardDescription>
-          </div>
-        </div>
-
-        <div class="grid min-w-[220px] gap-3 sm:grid-cols-2">
-          <div class="rounded-2xl bg-[#f5ede1] p-4">
-            <p
-              class="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a654f]"
-            >
-              Rechnungen
-            </p>
-            <p class="mt-2 text-2xl font-semibold text-slate-950">
-              {{ rows.length }}
-            </p>
-          </div>
-          <div class="rounded-2xl bg-[#eef2e8] p-4">
-            <p
-              class="text-xs font-semibold uppercase tracking-[0.18em] text-[#5b6c54]"
-            >
-              PDFs erstellt
-            </p>
-            <p class="mt-2 text-2xl font-semibold text-slate-950">
-              {{ generatedRowCount }}
-            </p>
-          </div>
+          <CardTitle class="text-3xl leading-tight md:text-4xl" id="error_card">
+            Eine Rechnung nach der anderen in Ruhe prüfen.
+          </CardTitle>
         </div>
       </CardHeader>
       <CardContent class="space-y-5">
-        <Alert
-          :variant="
-            validationResult &&
-            validationIsCurrent &&
-            validationResult.invalid_rows > 0
-              ? 'destructive'
-              : 'default'
-          "
-          :class="
-            validationResult &&
-            validationIsCurrent &&
-            validationResult.invalid_rows === 0
-              ? 'border-[#dbe4d4] bg-[#f7fbf4] text-slate-900'
-              : 'border-[#f1e4c9] bg-[#fffaf1] text-slate-900'
-          "
-        >
-          <component
-            :is="
-              validationResult &&
-              validationIsCurrent &&
-              validationResult.invalid_rows === 0
-                ? CheckCircle2
-                : AlertCircle
+        <div v-if="!!validationResult?.invalid_rows">
+          <Alert
+            :variant="
+              !!validationResult?.invalid_rows ? 'destructive' : 'default'
             "
-            class="mt-0.5 size-4"
-          />
-          <AlertTitle>
-            {{
-              !validationResult
-                ? "Die Rechnungen wurden noch nicht geprueft."
-                : !validationIsCurrent
-                  ? "Aenderungen noch nicht geprueft."
-                  : validationResult.invalid_rows > 0
-                    ? "Es gibt noch Fehler in den Rechnungen."
-                    : "Alles ist aktuell geprueft."
-            }}
-          </AlertTitle>
-          <AlertDescription class="leading-6">
-            {{
-              !validationResult
-                ? "Klicke auf den Pruef-Button, damit wir dir moegliche Probleme zeigen."
-                : !validationIsCurrent
-                  ? "Bitte einmal neu pruefen, bevor du zur ZIP-Datei weitergehst."
-                  : validationResult.invalid_rows > 0
-                    ? "Die markierten Felder brauchen noch Aufmerksamkeit."
-                    : "Du kannst jetzt direkt in den Download-Schritt wechseln."
-            }}
-          </AlertDescription>
-        </Alert>
+            :class="
+              !!validationResult?.invalid_rows
+                ? 'border-[#dbe4d4] bg-[#f7fbf4] text-slate-900'
+                : 'border-[#f1e4c9] bg-[#fffaf1] text-slate-900'
+            "
+          >
+            <component
+              :is="
+                !!validationResult?.invalid_rows ? CheckCircle2 : AlertCircle
+              "
+              class="mt-0.5 size-4"
+            />
+            <AlertTitle>
+              {{
+                !!validationResult?.invalid_rows
+                  ? "Es gibt noch Fehler in den Rechnungen."
+                  : "Alles ist aktuell geprueft."
+              }}
+            </AlertTitle>
+            <AlertDescription class="leading-6">
+              {{
+                !!validationResult?.invalid_rows
+                  ? "Die markierten Felder brauchen noch Aufmerksamkeit."
+                  : "Du kannst jetzt direkt in den Download-Schritt wechseln."
+              }}
+            </AlertDescription>
+          </Alert>
+        </div>
 
         <div
           class="flex flex-col gap-4 rounded-[1.75rem] border border-[#ddd3c3] bg-[#faf5ed] p-5 lg:flex-row lg:items-center lg:justify-between"
@@ -251,49 +219,6 @@ defineProps<{
               {{ index + 1 }}
             </button>
           </div>
-        </div>
-
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="flex flex-wrap items-center gap-2">
-            <Badge
-              v-if="selectedRow"
-              :variant="
-                isRowGenerated(selectedRow.uid)
-                  ? 'secondary'
-                  : validationIsCurrent && rowHasErrors(selectedRowIndex)
-                    ? 'destructive'
-                    : 'secondary'
-              "
-              class="rounded-full px-3 py-1"
-            >
-              {{
-                selectedRow && isRowGenerated(selectedRow.uid)
-                  ? "PDF schon erstellt"
-                  : validationIsCurrent && rowHasErrors(selectedRowIndex)
-                    ? "Fehler in dieser Rechnung"
-                    : validationIsCurrent
-                      ? "Diese Rechnung ist okay"
-                      : "Bitte erneut pruefen"
-              }}
-            </Badge>
-            <span class="text-sm text-slate-500">
-              Die Pruefung bleibt gesammelt, die Bearbeitung aber ganz bewusst
-              pro Rechnung.
-            </span>
-          </div>
-
-          <Button
-            class="rounded-full bg-[#5d7253] px-6 hover:bg-[#4f6348]"
-            size="lg"
-            :disabled="rows.length === 0 || isValidating"
-            @click="onValidate"
-          >
-            {{
-              isValidating
-                ? "Rechnungen werden geprueft..."
-                : "Aenderungen jetzt pruefen"
-            }}
-          </Button>
         </div>
       </CardContent>
     </Card>
@@ -1035,12 +960,7 @@ defineProps<{
           <Button
             variant="outline"
             class="w-full rounded-full border-[#d8dfd3] bg-white px-6"
-            :disabled="
-              !validationResult ||
-              !validationIsCurrent ||
-              validationResult.invalid_rows > 0
-            "
-            @click="onOpenDownload"
+            @click="handleFormValidation"
           >
             Weiter zum Download-Schritt
           </Button>
