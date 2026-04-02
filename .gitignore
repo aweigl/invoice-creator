@@ -14,3 +14,5 @@ backend/.pytest_cache
 backend/.mypy_cache
 
 .vscode
+
+.env
