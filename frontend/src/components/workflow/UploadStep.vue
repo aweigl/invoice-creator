@@ -58,7 +58,7 @@ defineProps<{
             <div class="flex-1 space-y-4">
               <div>
                 <p class="text-lg font-semibold text-slate-950">
-                  CSV-Datei waehlen
+                  CSV-Datei wählen
                 </p>
                 <p class="mt-1 text-sm leading-6 text-slate-600">
                   Bitte eine `.csv` Datei mit den bekannten Rechnungsdaten
@@ -108,7 +108,7 @@ defineProps<{
         </Alert>
 
         <Alert v-if="serverError" variant="destructive">
-          <AlertTitle>Pruefung fehlgeschlagen</AlertTitle>
+          <AlertTitle>Prüfung fehlgeschlagen</AlertTitle>
           <AlertDescription>{{ serverError }}</AlertDescription>
         </Alert>
 
@@ -118,8 +118,8 @@ defineProps<{
             <span>
               {{
                 isValidating
-                  ? "Datei wird gerade geprueft..."
-                  : "Nach dem Upload geht es direkt weiter zur Pruefung."
+                  ? "Datei wird gerade geprüft..."
+                  : "Nach dem Upload geht es direkt weiter zur Prüfung."
               }}
             </span>
           </div>
@@ -129,7 +129,7 @@ defineProps<{
             size="lg"
             @click="onContinue"
           >
-            Zur Rechnungspruefung
+            Zur Rechnungsprüfung
           </Button>
         </div>
       </CardContent>
@@ -139,15 +139,9 @@ defineProps<{
       class="border-white/70 bg-white/78 shadow-[0_20px_60px_rgba(69,73,58,0.08)]"
     >
       <CardHeader class="space-y-4">
-        <div class="rounded-2xl bg-[#f1e4d4] p-3 text-[#7c634b]">
+        <div class="flex gap-2 rounded-2xl bg-[#f1e4d4] p-3 text-[#7c634b]">
           <ShieldCheck class="size-6" />
-        </div>
-        <div>
-          <CardTitle class="text-2xl">So bleibt es unkompliziert</CardTitle>
-          <CardDescription class="mt-2 text-sm leading-6 text-slate-600">
-            Die App ist jetzt auf den einfachen Standardfall ausgelegt. Erst
-            hochladen, dann kurz pruefen, dann gesammelt herunterladen.
-          </CardDescription>
+          So funktioniert's:
         </div>
       </CardHeader>
       <CardContent class="space-y-4">
@@ -173,7 +167,7 @@ defineProps<{
             3. Alles zusammen herunterladen
           </p>
           <p class="mt-1 text-sm leading-6 text-slate-600">
-            Wenn alles gruen ist, gibt es die PDF-Rechnungen gesammelt als ZIP.
+            Wenn alles grün ist, gibt es die PDF-Rechnungen gesammelt als ZIP.
           </p>
         </div>
       </CardContent>

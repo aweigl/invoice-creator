@@ -65,7 +65,7 @@ defineProps<{
           </div>
           <div class="rounded-2xl bg-[#eef2e8] p-4">
             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-[#5b6c54]">
-              Gueltig
+              Gültig
             </p>
             <p class="mt-2 text-2xl font-semibold text-slate-950">
               {{ validationResult?.valid_rows ?? 0 }}
@@ -97,19 +97,19 @@ defineProps<{
           <AlertTitle>
             {{
               canGenerate
-                ? "Alles bereit fuer den Download."
+                ? "Alles bereit für den Download."
                 : !validationResult
-                  ? "Bitte erst die Rechnungen pruefen."
+                  ? "Bitte erst die Rechnungen prüfen."
                   : !validationIsCurrent
-                    ? "Die letzte Aenderung wurde noch nicht geprueft."
+                    ? "Die letzte Änderung wurde noch nicht geprüft."
                     : `${validationResult.invalid_rows} Rechnung(en) brauchen noch Aufmerksamkeit.`
             }}
           </AlertTitle>
           <AlertDescription class="leading-6">
             {{
               canGenerate
-                ? "Die ZIP-Datei enthaelt alle aktuell gueltigen Rechnungs-PDFs."
-                : "Wenn noch etwas fehlt, geh kurz in Schritt 2 zurueck und pruefe die markierten Stellen."
+                ? "Die ZIP-Datei enthält alle aktuell gültigen Rechnungs-PDFs."
+                : "Wenn noch etwas fehlt, geh kurz in Schritt 2 zurück und prüfe die markierten Stellen."
             }}
           </AlertDescription>
         </Alert>
@@ -136,7 +136,7 @@ defineProps<{
             @click="onGoReview"
           >
             <RefreshCcw class="size-4" />
-            Zurueck zur Pruefung
+            Zurück zur Prüfung
           </Button>
         </div>
       </CardContent>
@@ -150,7 +150,7 @@ defineProps<{
         <div>
           <CardTitle class="text-2xl">Optional: aktuelle Rechnung einzeln</CardTitle>
           <CardDescription class="mt-2 text-sm leading-6 text-slate-600">
-            Falls du vor dem Sammeldownload noch die gerade geoeffnete Rechnung
+            Falls du vor dem Sammeldownload noch die gerade geöffnete Rechnung
             anschauen oder einzeln speichern willst.
           </CardDescription>
         </div>
@@ -173,7 +173,7 @@ defineProps<{
             @click="onPreviewSelected"
           >
             <Eye class="size-4" />
-            {{ isPreviewLoading ? "Vorschau wird geladen..." : "PDF-Vorschau oeffnen" }}
+            {{ isPreviewLoading ? "Vorschau wird geladen..." : "PDF-Vorschau öffnen" }}
           </Button>
 
           <Button

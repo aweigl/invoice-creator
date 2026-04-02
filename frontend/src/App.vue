@@ -139,7 +139,7 @@ const canAccessDownload = computed(() => hasRows.value);
 
 const uploadValidationMessage = computed(() => {
   if (isValidating.value) {
-    return "Datei wird automatisch geprueft.";
+    return "Datei wird automatisch geprüft.";
   }
 
   if (fileError.value) {
@@ -147,26 +147,26 @@ const uploadValidationMessage = computed(() => {
   }
 
   if (serverError.value && currentStep.value === "upload") {
-    return "Pruefung konnte nicht abgeschlossen werden.";
+    return "Prüfung konnte nicht abgeschlossen werden.";
   }
 
   if (!hasRows.value) {
-    return "Bereit fuer deine CSV-Datei.";
+    return "Bereit für deine CSV-Datei.";
   }
 
   if (!validationResult.value) {
-    return "Datei eingelesen. Eine Pruefung steht noch aus.";
+    return "Datei eingelesen. Eine Prüfung steht noch aus.";
   }
 
   if (!validationIsCurrent.value) {
-    return "Datei eingelesen. Aenderungen bitte erneut pruefen.";
+    return "Datei eingelesen. Änderungen bitte erneut prüfen.";
   }
 
   if (validationResult.value.invalid_rows > 0) {
     return `${validationResult.value.invalid_rows} Rechnung(en) brauchen noch Aufmerksamkeit.`;
   }
 
-  return "Datei erfolgreich geprueft. Du kannst weitermachen.";
+  return "Datei erfolgreich geprüft. Du kannst weitermachen.";
 });
 
 const reviewReady = computed(
@@ -179,7 +179,7 @@ const reviewReady = computed(
 const selectedRowLabel = computed(() =>
   selectedRow.value
     ? `${selectedRow.value.customer_name || "Ohne Kundenname"} · ${selectedRow.value.invoice_number || "Ohne Rechnungsnummer"}`
-    : "Keine Rechnung ausgewaehlt",
+    : "Keine Rechnung ausgewählt",
 );
 
 const selectedRowPreviewItems = computed(() =>
@@ -215,12 +215,12 @@ const workflowSteps = computed<
   {
     key: "upload",
     label: "CSV hochladen",
-    hint: hasRows.value ? "Datei bereit" : "Datei waehlen",
+    hint: hasRows.value ? "Datei bereit" : "Datei wählen",
     icon: FileUp,
   },
   {
     key: "review",
-    label: "Rechnungen pruefen",
+    label: "Rechnungen prüfen",
     hint: reviewReady.value ? "Bereit" : "Bearbeiten",
     icon: PenLine,
   },
@@ -362,7 +362,7 @@ function addDailyDateToSelectedRow() {
   if (!pendingValue) {
     dailyDateInputErrorByRow.value = {
       ...dailyDateInputErrorByRow.value,
-      [rowUid]: "Bitte zuerst einen Termin auswaehlen.",
+      [rowUid]: "Bitte zuerst einen Termin auswählen.",
     };
     return;
   }
@@ -679,7 +679,7 @@ function previewLineItems(row: EditablePricingRow): PreviewLineItem[] {
     const formattedDates = formatGermanDateList(row.daily_dates);
     const dailyPrice = effectiveDailyPrice(row);
     items.push({
-      label: "Zusaetzliche Tagesbetreuung",
+      label: "Zusätzliche Tagesbetreuung",
       detail: `${dailyCount} Tag(e) x ${formatEuro(dailyPrice)}${row.daily_count_rebate ? " · Rabatt" : ""}${formattedDates ? ` · am ${formattedDates}` : ""}`,
       amount: dailyCount * dailyPrice,
     });
@@ -697,7 +697,7 @@ function previewLineItems(row: EditablePricingRow): PreviewLineItem[] {
   if (row.include_extended_km_surcharge) {
     items.push({
       label: "Erweiterter Kilometerbereich",
-      detail: `Zuschlag fuer Anfahrt ausserhalb des Standardbereichs (${SERVICE_AREA_RADIUS_KM}km)`,
+      detail: `Zuschlag für Anfahrt außerhalb des Standardbereichs (${SERVICE_AREA_RADIUS_KM}km)`,
       amount: effectiveExtendedKmSurchargeAmount(row),
     });
   }
@@ -781,13 +781,13 @@ async function handleFileChange(event: Event) {
   }
 
   if (!file.name.toLowerCase().endsWith(".csv")) {
-    fileError.value = "Bitte waehle eine CSV-Datei aus.";
+    fileError.value = "Bitte wähle eine CSV-Datei aus.";
     input.value = "";
     return;
   }
 
   if (file.size > MAX_CSV_BYTES) {
-    fileError.value = `Die CSV-Datei ist zu gross. Bitte lade eine Datei unter ${formatBytes(MAX_CSV_BYTES)} hoch.`;
+    fileError.value = `Die CSV-Datei ist zu groß. Bitte lade eine Datei unter ${formatBytes(MAX_CSV_BYTES)} hoch.`;
     input.value = "";
     return;
   }
@@ -797,7 +797,7 @@ async function handleFileChange(event: Event) {
 
   if (parsed.headers.length === 0 || parsed.rows.length === 0) {
     fileError.value =
-      "Die CSV-Datei konnte nicht gelesen werden oder enthaelt keine Rechnungszeilen.";
+      "Die CSV-Datei konnte nicht gelesen werden oder enthält keine Rechnungszeilen.";
     input.value = "";
     return;
   }
@@ -878,7 +878,7 @@ async function validateRows(nextStepOnSuccess: WorkflowStep | null = null) {
 async function generateInvoices() {
   if (!canGenerate.value) {
     serverError.value =
-      "Bitte pruefe die aktuellen Daten erfolgreich, bevor du die ZIP-Datei erstellst.";
+      "Bitte prüfe die aktuellen Daten erfolgreich, bevor du die ZIP-Datei erstellst.";
     return;
   }
 
@@ -965,7 +965,7 @@ function buildSingleRowPayload(row: EditablePricingRow) {
 
 async function resolveSelectedRowAddressDistance() {
   if (!selectedRow.value) {
-    serverError.value = "Bitte waehle zuerst eine Rechnungszeile aus.";
+    serverError.value = "Bitte wähle zuerst eine Rechnungszeile aus.";
     return;
   }
 
@@ -1070,24 +1070,24 @@ function tryInitialSelectedRowAddressLookup() {
 
 async function generateSelectedRowPdf() {
   if (!selectedRow.value) {
-    serverError.value = "Bitte waehle zuerst eine Rechnungszeile aus.";
+    serverError.value = "Bitte wähle zuerst eine Rechnungszeile aus.";
     return;
   }
 
   if (isRowGenerated(selectedRow.value.uid)) {
-    serverError.value = "Fuer diese Rechnung wurde das PDF bereits erstellt.";
+    serverError.value = "Für diese Rechnung wurde das PDF bereits erstellt.";
     return;
   }
 
   if (!validationIsCurrent.value) {
     serverError.value =
-      "Bitte pruefe die aktuellen Daten erneut, bevor du ein PDF erzeugst.";
+      "Bitte prüfe die aktuellen Daten erneut, bevor du ein PDF erzeugst.";
     return;
   }
 
   if (rowHasErrors(selectedRowIndex.value)) {
     serverError.value =
-      "Die ausgewaehlte Rechnung enthaelt noch Validierungsfehler.";
+      "Die ausgewählte Rechnung enthält noch Validierungsfehler.";
     return;
   }
 
@@ -1139,26 +1139,26 @@ async function loadSelectedRowPreview() {
 
   if (!selectedRow.value) {
     previewError.value =
-      "Bitte waehle zuerst eine Rechnungszeile fuer die PDF-Vorschau aus.";
+      "Bitte wähle zuerst eine Rechnungszeile für die PDF-Vorschau aus.";
     return;
   }
 
   if (!validationIsCurrent.value) {
     previewError.value =
-      "Bitte pruefe die aktuellen Daten erneut, bevor du die PDF-Vorschau laedst.";
+      "Bitte prüfe die aktuellen Daten erneut, bevor du die PDF-Vorschau lädst.";
     return;
   }
 
   if (rowHasErrors(selectedRowIndex.value)) {
     previewError.value =
-      "Die ausgewaehlte Rechnung enthaelt noch Validierungsfehler.";
+      "Die ausgewählte Rechnung enthält noch Validierungsfehler.";
     return;
   }
 
   const previewWindow = window.open("", "_blank");
   if (!previewWindow) {
     previewError.value =
-      "Bitte erlaube Pop-ups, damit die PDF-Vorschau in einem neuen Tab geoeffnet werden kann.";
+      "Bitte erlaube Pop-ups, damit die PDF-Vorschau in einem neuen Tab geöffnet werden kann.";
     return;
   }
 
@@ -1330,7 +1330,7 @@ onBeforeUnmount(() => {
                 v-if="showLisaPopover"
                 class="pointer-events-none absolute -top-12 left-1/2 z-10 -translate-x-1/2 rounded-md bg-slate-600 px-3 py-1 text-xs font-semibold whitespace-nowrap text-white shadow-lg"
               >
-                Click me! 👇
+                Klick mich! 👇
               </div>
               <div :class="{ 'animate-bounce': highlightLisaBadge }">
                 <Badge
@@ -1500,7 +1500,7 @@ onBeforeUnmount(() => {
         v-else
         class="rounded-[2rem] border border-dashed border-[#d9e2d4] bg-white/70 p-8 text-center text-sm leading-7 text-slate-600"
       >
-        Lade zuerst eine CSV hoch, damit die naechsten Schritte sichtbar werden.
+        Lade zuerst eine CSV hoch, damit die nächsten Schritte sichtbar werden.
       </section>
     </div>
   </main>

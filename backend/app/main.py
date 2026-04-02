@@ -40,14 +40,14 @@ def health_check() -> dict[str, str]:
 @app.post("/api/csv/validate", response_model=CsvValidationResult)
 async def validate_csv(file: UploadFile = File(...)) -> CsvValidationResult:
     if not file.filename or not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Please upload a .csv file.")
+        raise HTTPException(status_code=400, detail="Bitte lade eine `.csv`-Datei hoch.")
 
     try:
         raw_bytes = await file.read()
         if len(raw_bytes) > MAX_CSV_BYTES:
             raise HTTPException(
                 status_code=400,
-                detail=f"CSV file is too large. Maximum size is {MAX_CSV_BYTES} bytes.",
+                detail=f"Die CSV-Datei ist zu groß. Die maximale Größe beträgt {MAX_CSV_BYTES} Byte.",
             )
         content = decode_csv_content(raw_bytes)
         rows = parse_csv_rows(content)
@@ -92,8 +92,8 @@ def generate_invoices(payload: PricingRowsPayload) -> StreamingResponse:
             raise HTTPException(
                 status_code=500,
                 detail=(
-                    "PDF-Erstellung ist derzeit nicht verfuegbar. "
-                    "Bitte pruefe die WeasyPrint-Systembibliotheken."
+                    "PDF-Erstellung ist derzeit nicht verfügbar. "
+                    "Bitte prüfe die WeasyPrint-Systembibliotheken."
                 ),
             ) from exc
         archive_files.append((f"{row.invoice_number}.pdf", pdf_bytes))
@@ -115,14 +115,14 @@ def generate_single_invoice(payload: PricingRowsPayload) -> StreamingResponse:
     if len(payload.rows) != 1:
         raise HTTPException(
             status_code=400,
-            detail="Bitte uebergebe genau eine Rechnungszeile fuer den Einzel-PDF-Export.",
+            detail="Bitte übergebe genau eine Rechnungszeile für den Einzel-PDF-Export.",
         )
 
     validation_result = validate_invoice_rows(payload.rows, filename=payload.filename)
     if validation_result.invalid_rows > 0 or len(validation_result.validated_rows) != 1:
         raise HTTPException(
             status_code=400,
-            detail="Bitte korrigiere die ausgewaehlte Zeile vor der PDF-Erstellung.",
+            detail="Bitte korrigiere die ausgewählte Zeile vor der PDF-Erstellung.",
         )
 
     row = validation_result.validated_rows[0]
@@ -133,8 +133,8 @@ def generate_single_invoice(payload: PricingRowsPayload) -> StreamingResponse:
         raise HTTPException(
             status_code=500,
             detail=(
-                "PDF-Erstellung ist derzeit nicht verfuegbar. "
-                "Bitte pruefe die WeasyPrint-Systembibliotheken."
+                "PDF-Erstellung ist derzeit nicht verfügbar. "
+                "Bitte prüfe die WeasyPrint-Systembibliotheken."
             ),
         ) from exc
 
@@ -153,8 +153,8 @@ def _frontend_file_response(path: str = "index.html") -> FileResponse:
         raise HTTPException(
             status_code=404,
             detail=(
-                "Frontend build not found. Run the frontend build before serving "
-                "the application through FastAPI."
+                "Frontend-Build nicht gefunden. "
+                "Führe zuerst den Frontend-Build aus, bevor du die Anwendung über FastAPI auslieferst."
             ),
         )
     return FileResponse(file_path)
@@ -168,7 +168,7 @@ def serve_frontend_index() -> FileResponse:
 @app.get("/{full_path:path}")
 def serve_frontend_app(full_path: str) -> FileResponse:
     if full_path.startswith("api/") or full_path == "health":
-        raise HTTPException(status_code=404, detail="Not found.")
+        raise HTTPException(status_code=404, detail="Nicht gefunden.")
 
     requested_file = FRONTEND_DIST_DIR / full_path
     if requested_file.exists() and requested_file.is_file():

@@ -147,7 +147,7 @@ const handleFormValidation = async () => {
               {{
                 !!validationResult?.invalid_rows
                   ? "Es gibt noch Fehler in den Rechnungen."
-                  : "Alles ist aktuell geprueft."
+                  : "Alles ist aktuell geprüft."
               }}
             </AlertTitle>
             <AlertDescription class="leading-6">
@@ -180,7 +180,7 @@ const handleFormValidation = async () => {
                 :disabled="selectedRowIndex >= rows.length - 1"
                 @click="onNext"
               >
-                Naechste
+                Nächste
                 <ChevronRight class="size-4" />
               </Button>
             </div>
@@ -224,12 +224,12 @@ const handleFormValidation = async () => {
     </Card>
 
     <Alert v-if="serverError" variant="destructive">
-      <AlertTitle>Pruefung fehlgeschlagen</AlertTitle>
+      <AlertTitle>Prüfung fehlgeschlagen</AlertTitle>
       <AlertDescription>{{ serverError }}</AlertDescription>
     </Alert>
 
     <Alert v-if="previewError" variant="destructive">
-      <AlertTitle>Vorschau nicht verfuegbar</AlertTitle>
+      <AlertTitle>Vorschau nicht verfügbar</AlertTitle>
       <AlertDescription>{{ previewError }}</AlertDescription>
     </Alert>
 
@@ -244,9 +244,6 @@ const handleFormValidation = async () => {
             </div>
             <div>
               <CardTitle class="text-2xl">Wichtige Angaben</CardTitle>
-              <CardDescription class="mt-1 text-sm leading-6 text-slate-600">
-                Alles, was im Alltag meistens geprueft oder angepasst wird.
-              </CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -316,7 +313,7 @@ const handleFormValidation = async () => {
             </div>
 
             <div class="space-y-2">
-              <Label for="due-date-selected">Faelligkeitsdatum</Label>
+              <Label for="due-date-selected">Fälligkeitsdatum</Label>
               <Input
                 id="due-date-selected"
                 v-model="selectedRow.due_date"
@@ -410,7 +407,7 @@ const handleFormValidation = async () => {
 
             <div class="space-y-2">
               <Label for="daily-count-selected"
-                >Zusaetzliche Betreuungstage</Label
+                >Zusätzliche Betreuungstage</Label
               >
               <div
                 id="daily-count-selected"
@@ -419,7 +416,7 @@ const handleFormValidation = async () => {
                 {{ selectedDailyDates.length }}
               </div>
               <p class="text-xs text-slate-500">
-                Wird automatisch aus den ausgewaehlten Terminen berechnet.
+                Wird automatisch aus den ausgewählten Terminen berechnet.
                 Standard pro Tag:
                 {{
                   formatEuro(
@@ -452,14 +449,14 @@ const handleFormValidation = async () => {
                 @change="markRowDirty"
               />
               <Label for="daily-count-rebate-selected" class="leading-6">
-                Rabatt fuer Betreuungstage verwenden
+                Rabatt für Betreuungstage verwenden
               </Label>
             </div>
 
             <div class="space-y-2 md:col-span-2">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <Label for="daily-dates-selected"
-                  >Termine fuer Betreuungstage</Label
+                  >Termine für Betreuungstage</Label
                 >
                 <Button
                   v-if="selectedDailyDates.length > 0"
@@ -486,12 +483,12 @@ const handleFormValidation = async () => {
                     @click="onAddDailyDate"
                   >
                     <CirclePlus class="size-4" />
-                    Termin hinzufuegen
+                    Termin hinzufügen
                   </Button>
                 </div>
                 <p class="mt-3 text-xs text-slate-500">
-                  Fuege Betreuungstage einzeln hinzu. Die Anzahl wird
-                  automatisch passend gesetzt.
+                  Füge Betreuungstage einzeln hinzu. Die Anzahl wird automatisch
+                  passend gesetzt.
                 </p>
                 <p
                   v-if="dailyDateInputError"
@@ -525,11 +522,11 @@ const handleFormValidation = async () => {
                   v-else
                   class="mt-4 rounded-2xl border border-dashed border-[#d8dfd3] bg-white/70 p-4 text-sm text-slate-500"
                 >
-                  Noch keine Termine hinzugefuegt.
+                  Noch keine Termine hinzugefügt.
                 </div>
               </div>
               <p class="text-xs text-slate-500">
-                Die Termine werden intern weiterhin als Liste fuer die Rechnung
+                Die Termine werden intern weiterhin als Liste für die Rechnung
                 gespeichert.
               </p>
               <p
@@ -556,7 +553,7 @@ const handleFormValidation = async () => {
                 v-if="isResolvingSelectedRowDistance"
                 class="text-xs text-slate-500"
               >
-                Adresse wird geprueft...
+                Adresse wird geprüft...
               </p>
               <p
                 v-for="message in validationErrorsForField(
@@ -588,8 +585,8 @@ const handleFormValidation = async () => {
                 <p class="text-sm leading-6 text-slate-600">
                   {{
                     needsAddressCheck && !selectedRowAddressDistanceError
-                      ? "Die Adresse wurde geaendert. Bitte die Pruefung erneut starten."
-                      : "Du kannst die Adresspruefung auch manuell erneut starten."
+                      ? "Die Adresse wurde geändert. Bitte die Prüfung erneut starten."
+                      : "Du kannst die Adressprüfung auch manuell erneut starten."
                   }}
                 </p>
                 <Button
@@ -597,7 +594,7 @@ const handleFormValidation = async () => {
                   class="rounded-full border-[#ddd3c3] bg-white px-4"
                   @click="onResolveAddress"
                 >
-                  Adresse pruefen
+                  Adresse prüfen
                 </Button>
               </div>
             </div>
@@ -610,7 +607,7 @@ const handleFormValidation = async () => {
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p class="text-sm font-semibold text-slate-900">
-                  Adresspruefung erfolgreich
+                  Adressprüfung erfolgreich
                 </p>
                 <p class="mt-1 text-sm leading-6 text-slate-600">
                   Die Strecke wurde berechnet und der Zuschlag passend zum
@@ -675,8 +672,8 @@ const handleFormValidation = async () => {
                   Erweiterte Optionen
                 </p>
                 <p class="mt-1 text-sm leading-6 text-slate-600">
-                  Nur oeffnen, wenn du Sonderfaelle, Einzel-PDFs oder die
-                  Adresspruefung brauchst.
+                  Nur öffnen, wenn du Sonderfälle, Einzel-PDFs oder die
+                  Adressprüfung brauchst.
                 </p>
               </div>
               <Button
@@ -718,7 +715,7 @@ const handleFormValidation = async () => {
                     "
                   />
                   <p class="text-xs text-slate-500">
-                    Leer lassen fuer den Standardpreis.
+                    Leer lassen für den Standardpreis.
                   </p>
                   <p
                     v-for="message in validationErrorsForField(
@@ -757,7 +754,7 @@ const handleFormValidation = async () => {
                     "
                   />
                   <p class="text-xs text-slate-500">
-                    Gilt nur fuer diese eine Rechnung.
+                    Gilt nur für diese eine Rechnung.
                   </p>
                   <p
                     v-for="message in validationErrorsForField(
@@ -906,7 +903,7 @@ const handleFormValidation = async () => {
             <div>
               <CardTitle class="text-2xl">Schnelle Vorschau</CardTitle>
               <CardDescription class="mt-1 text-sm leading-6 text-slate-600">
-                So sieht die aktuelle Rechnung inhaltlich ungefaehr aus.
+                So sieht die aktuelle Rechnung inhaltlich ungefähr aus.
               </CardDescription>
             </div>
           </div>
@@ -950,7 +947,7 @@ const handleFormValidation = async () => {
 
           <div class="rounded-[1.5rem] bg-[#334235] px-5 py-4 text-white">
             <p class="text-xs uppercase tracking-[0.18em] text-white/70">
-              Geschaetzter Netto-Betrag
+              Geschätzter Netto-Betrag
             </p>
             <p class="mt-2 text-3xl font-semibold">
               {{ formatEuro(estimateTotal) }}
@@ -978,7 +975,7 @@ const handleFormValidation = async () => {
         </p>
         <p class="mt-2 text-sm leading-6 text-slate-600">
           Du kannst jetzt direkt in den Download-Schritt wechseln oder oben eine
-          andere Rechnung auswaehlen, falls neue Daten dazukommen.
+          andere Rechnung auswählen, falls neue Daten dazukommen.
         </p>
         <Button
           variant="outline"

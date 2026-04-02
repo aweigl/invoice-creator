@@ -96,7 +96,7 @@ def build_line_items(row: PricingInvoiceCsvRow) -> list[PricingInvoiceLineItem]:
             PricingInvoiceLineItem(
                 description="Erweiterter Kilometerbereich",
                 detail=(
-                    "Zuschlag fuer Anfahrt ausserhalb des "
+                    "Zuschlag für Anfahrt außerhalb des "
                     f"Standardbereichs ({SERVICE_AREA_RADIUS_KM:g} km)"
                 ),
                 quantity=Decimal("1"),

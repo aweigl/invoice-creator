@@ -114,13 +114,13 @@ export const SUBSCRIPTION_PRICES: Record<SubscriptionPlan, number> = {
 export const PLAN_LABELS: Record<SubscriptionPlan, string> = {
   none: "Kein Abo",
   "1x_week":
-    "Abholung Gruppenspaziergang und Heimbringen {dog_name} von/zu Ihrem Haus in Köln (1x pro Woche)",
+    "Abholung, Gruppenspaziergang und Heimbringen von {dog_name} von/zu Ihrem Haus in Köln (1x pro Woche)",
   "2x_week":
-    "Abholung Gruppenspaziergang und Heimbringen {dog_name} von/zu Ihrem Haus in Köln (2x pro Woche)",
+    "Abholung, Gruppenspaziergang und Heimbringen von {dog_name} von/zu Ihrem Haus in Köln (2x pro Woche)",
   "3x_week":
-    "Abholung Gruppenspaziergang und Heimbringen {dog_name} von/zu Ihrem Haus in Köln (3x pro Woche)",
+    "Abholung, Gruppenspaziergang und Heimbringen von {dog_name} von/zu Ihrem Haus in Köln (3x pro Woche)",
   "4x_week":
-    "Abholung Gruppenspaziergang und Heimbringen {dog_name} von/zu Ihrem Haus in Köln (4x pro Woche)",
+    "Abholung, Gruppenspaziergang und Heimbringen von {dog_name} von/zu Ihrem Haus in Köln (4x pro Woche)",
 };
 
 export const DAILY_PRICE = 35;

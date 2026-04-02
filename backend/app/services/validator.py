@@ -42,7 +42,7 @@ def validate_invoice_rows(
             CsvValidationError(
                 row_number=0,
                 column=column,
-                message=f"Missing required column '{column}'.",
+                message=f"Pflichtspalte '{column}' fehlt.",
             )
         )
 
@@ -70,7 +70,7 @@ def validate_invoice_rows(
                     CsvValidationError(
                         row_number=index,
                         column=column,
-                        message=issue.get("msg", "Invalid value."),
+                        message=issue.get("msg", "Ungültiger Wert."),
                     )
                 )
             continue
@@ -81,7 +81,7 @@ def validate_invoice_rows(
                     row_number=index,
                     column="currency",
                     message=(
-                        "Unsupported currency. Use one of: "
+                        "Nicht unterstützte Währung. Bitte verwende eine von: "
                         + ", ".join(sorted(SUPPORTED_CURRENCIES))
                         + "."
                     ),

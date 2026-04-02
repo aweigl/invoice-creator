@@ -45,7 +45,7 @@ def _parse_daily_dates(value: str) -> list[date]:
     parts = [part.strip() for part in raw_parts]
     if any(not part for part in parts):
         raise ValueError(
-            "daily_dates must be a list of ISO dates separated by commas within the field, without empty values."
+            "daily_dates muss eine Liste von ISO-Daten sein, die innerhalb des Feldes durch Kommas getrennt ist und keine leeren Werte enthält."
         )
 
     parsed_dates: list[date] = []
@@ -54,7 +54,7 @@ def _parse_daily_dates(value: str) -> list[date]:
             parsed_dates.append(date.fromisoformat(part))
         except ValueError as exc:
             raise ValueError(
-                "daily_dates must contain valid ISO dates in YYYY-MM-DD format."
+                "daily_dates muss gültige ISO-Daten im Format JJJJ-MM-TT enthalten."
             ) from exc
 
     return parsed_dates
@@ -194,18 +194,18 @@ class PricingInvoiceCsvRow(BaseModel):
         if daily_count == 0:
             if parsed_dates:
                 raise ValueError(
-                    "daily_dates must be empty when daily_count is 0."
+                    "daily_dates muss leer sein, wenn daily_count 0 ist."
                 )
             return ""
 
         if not parsed_dates:
             raise ValueError(
-                "Please provide daily_dates when daily_count is greater than 0."
+                "Bitte gib daily_dates an, wenn daily_count größer als 0 ist."
             )
 
         if len(parsed_dates) != daily_count:
             raise ValueError(
-                "daily_count must exactly match the number of dates in daily_dates."
+                "daily_count muss genau der Anzahl der Daten in daily_dates entsprechen."
             )
 
         return ",".join(parsed_date.isoformat() for parsed_date in parsed_dates)

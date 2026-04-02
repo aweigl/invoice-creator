@@ -57,7 +57,7 @@ def _fetch_json(
         ) from exc
     except json.JSONDecodeError as exc:
         raise AddressLookupError(
-            "Der Routing-Dienst hat keine gueltige JSON-Antwort geliefert."
+            "Der Routing-Dienst hat keine gültige JSON-Antwort geliefert."
         ) from exc
 
 
@@ -77,7 +77,7 @@ def resolve_address_distance(address: str) -> AddressDistanceResponse:
 
     if not isinstance(geocoding_response, list) or not geocoding_response:
         raise AddressNotFoundError(
-            "Die Adresse konnte ueber Nominatim nicht aufgeloest werden."
+            "Die Adresse konnte über Nominatim nicht aufgelöst werden."
         )
 
     first_match = geocoding_response[0]
@@ -93,7 +93,7 @@ def resolve_address_distance(address: str) -> AddressDistanceResponse:
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise AddressLookupError(
-            "Die Geocoding-Antwort enthielt keine gueltigen Koordinaten."
+            "Die Geocoding-Antwort enthielt keine gültigen Koordinaten."
         ) from exc
 
     origin = CoordinatePoint(
@@ -119,7 +119,7 @@ def resolve_address_distance(address: str) -> AddressDistanceResponse:
     routes = route_response.get("routes")
     if route_response.get("code") != "Ok" or not isinstance(routes, list) or not routes:
         raise AddressLookupError(
-            "OSRM konnte keine Route fuer diese Adresse berechnen."
+            "OSRM konnte keine Route für diese Adresse berechnen."
         )
 
     first_route = routes[0]
@@ -132,7 +132,7 @@ def resolve_address_distance(address: str) -> AddressDistanceResponse:
         route_distance_meters = float(first_route["distance"])
     except (KeyError, TypeError, ValueError) as exc:
         raise AddressLookupError(
-            "Die Routing-Antwort enthielt keine gueltige Distanz."
+            "Die Routing-Antwort enthielt keine gültige Distanz."
         ) from exc
 
     route_distance_km = round(route_distance_meters / 1000, 2)
