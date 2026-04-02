@@ -20,6 +20,8 @@ import {
   TEST_RUN_PRICE,
 } from "@/lib/invoice-workflow";
 import type {
+  AddressAutocompleteResponse,
+  AddressAutocompleteSuggestion,
   AddressDistanceResult,
   CsvValidationError,
   CsvValidationResult,
@@ -55,11 +57,19 @@ const currentStep = ref<WorkflowStep>("upload");
 const advancedOptionsOpen = ref(false);
 const pendingDailyDateByRow = ref<Record<string, string>>({});
 const dailyDateInputErrorByRow = ref<Record<string, string>>({});
+const addressAutocompleteSuggestions = ref<AddressAutocompleteSuggestion[]>([]);
+const addressAutocompleteError = ref("");
+const addressAutocompleteOpen = ref(false);
+const addressAutocompleteHighlightedIndex = ref(-1);
+const isAddressAutocompleteLoading = ref(false);
 const showLisaPopover = ref(false);
 const highlightLisaBadge = ref(false);
 
 let lisaPopoverTimeoutId: number | null = null;
 let lisaPopoverHideTimeoutId: number | null = null;
+let addressAutocompleteDebounceTimeoutId: number | null = null;
+let addressAutocompleteBlurTimeoutId: number | null = null;
+let latestAddressAutocompleteRequestId = 0;
 
 const hasRows = computed(() => editableRows.value.length > 0);
 const generatedRowUidSet = computed(() => new Set(generatedRowUids.value));
@@ -718,6 +728,156 @@ function markRowDirty() {
   markRowsDirty();
 }
 
+function clearAddressAutocompleteDebounce() {
+  if (addressAutocompleteDebounceTimeoutId !== null) {
+    window.clearTimeout(addressAutocompleteDebounceTimeoutId);
+    addressAutocompleteDebounceTimeoutId = null;
+  }
+}
+
+function clearAddressAutocompleteBlurTimeout() {
+  if (addressAutocompleteBlurTimeoutId !== null) {
+    window.clearTimeout(addressAutocompleteBlurTimeoutId);
+    addressAutocompleteBlurTimeoutId = null;
+  }
+}
+
+function resetAddressAutocompleteState() {
+  clearAddressAutocompleteDebounce();
+  clearAddressAutocompleteBlurTimeout();
+  latestAddressAutocompleteRequestId += 1;
+  addressAutocompleteSuggestions.value = [];
+  addressAutocompleteError.value = "";
+  addressAutocompleteOpen.value = false;
+  addressAutocompleteHighlightedIndex.value = -1;
+  isAddressAutocompleteLoading.value = false;
+}
+
+function hasSelectedAddressAutocompleteContent(): boolean {
+  return (
+    isAddressAutocompleteLoading.value ||
+    addressAutocompleteError.value.length > 0 ||
+    addressAutocompleteSuggestions.value.length > 0
+  );
+}
+
+function openAddressAutocompletePanel() {
+  if (!selectedRow.value || !hasSelectedAddressAutocompleteContent()) {
+    return;
+  }
+
+  addressAutocompleteOpen.value = true;
+  if (
+    addressAutocompleteSuggestions.value.length > 0 &&
+    addressAutocompleteHighlightedIndex.value < 0
+  ) {
+    addressAutocompleteHighlightedIndex.value = 0;
+  }
+}
+
+function hideAddressAutocompletePanel() {
+  addressAutocompleteOpen.value = false;
+  addressAutocompleteHighlightedIndex.value = -1;
+}
+
+function isStaleAddressAutocompleteRequest(
+  requestId: number,
+  rowUid: string,
+  query: string,
+): boolean {
+  const currentSelectedRow = selectedRow.value;
+  return (
+    requestId !== latestAddressAutocompleteRequestId ||
+    currentSelectedRow?.uid !== rowUid ||
+    currentSelectedRow?.customer_address.trim() !== query
+  );
+}
+
+async function fetchAddressAutocompleteSuggestions(
+  query: string,
+  rowUid: string,
+  requestId: number,
+) {
+  isAddressAutocompleteLoading.value = true;
+  addressAutocompleteError.value = "";
+  addressAutocompleteSuggestions.value = [];
+  addressAutocompleteHighlightedIndex.value = -1;
+  addressAutocompleteOpen.value = true;
+
+  try {
+    const response = await fetch(
+      `${apiBaseUrl}/api/address/autocomplete?q=${encodeURIComponent(query)}`,
+    );
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as {
+        detail?: string;
+      } | null;
+      throw new Error(
+        payload?.detail ?? `Adresssuche fehlgeschlagen (${response.status})`,
+      );
+    }
+
+    const result = (await response.json()) as AddressAutocompleteResponse;
+    if (isStaleAddressAutocompleteRequest(requestId, rowUid, query)) {
+      return;
+    }
+
+    addressAutocompleteSuggestions.value = result.suggestions;
+    addressAutocompleteHighlightedIndex.value =
+      result.suggestions.length > 0 ? 0 : -1;
+    addressAutocompleteOpen.value = true;
+  } catch (error) {
+    if (isStaleAddressAutocompleteRequest(requestId, rowUid, query)) {
+      return;
+    }
+
+    addressAutocompleteError.value =
+      error instanceof Error
+        ? error.message
+        : "Unbekannter Fehler bei der Adresssuche.";
+    addressAutocompleteSuggestions.value = [];
+    addressAutocompleteHighlightedIndex.value = -1;
+    addressAutocompleteOpen.value = true;
+  } finally {
+    if (!isStaleAddressAutocompleteRequest(requestId, rowUid, query)) {
+      isAddressAutocompleteLoading.value = false;
+    }
+  }
+}
+
+function scheduleAddressAutocompleteLookup() {
+  if (!selectedRow.value) {
+    resetAddressAutocompleteState();
+    return;
+  }
+
+  const rowUid = selectedRow.value.uid;
+  const query = selectedRow.value.customer_address.trim();
+  clearAddressAutocompleteDebounce();
+  clearAddressAutocompleteBlurTimeout();
+  latestAddressAutocompleteRequestId += 1;
+  const requestId = latestAddressAutocompleteRequestId;
+
+  addressAutocompleteError.value = "";
+
+  if (!query || query.length < 3) {
+    addressAutocompleteSuggestions.value = [];
+    hideAddressAutocompletePanel();
+    isAddressAutocompleteLoading.value = false;
+    return;
+  }
+
+  addressAutocompleteSuggestions.value = [];
+  addressAutocompleteHighlightedIndex.value = -1;
+  isAddressAutocompleteLoading.value = true;
+  addressAutocompleteOpen.value = true;
+
+  addressAutocompleteDebounceTimeoutId = window.setTimeout(() => {
+    void fetchAddressAutocompleteSuggestions(query, rowUid, requestId);
+  }, 300);
+}
+
 function clearAddressDistanceStateForRow(uid: string) {
   const { [uid]: _result, ...remainingResults } = distanceLookupResults.value;
   const { [uid]: _error, ...remainingErrors } = distanceLookupErrors.value;
@@ -733,11 +893,102 @@ function clearAddressDistanceStateForRow(uid: string) {
 function handleSelectedAddressInput() {
   if (!selectedRow.value) {
     markRowDirty();
+    resetAddressAutocompleteState();
     return;
   }
 
   markRowDirty();
   clearAddressDistanceStateForRow(selectedRow.value.uid);
+  scheduleAddressAutocompleteLookup();
+}
+
+function handleSelectedAddressFocus() {
+  clearAddressAutocompleteBlurTimeout();
+  openAddressAutocompletePanel();
+}
+
+function handleSelectedAddressBlur() {
+  clearAddressAutocompleteBlurTimeout();
+  addressAutocompleteBlurTimeoutId = window.setTimeout(() => {
+    hideAddressAutocompletePanel();
+  }, 120);
+}
+
+function highlightAddressAutocompleteSuggestion(index: number) {
+  addressAutocompleteHighlightedIndex.value = index;
+}
+
+function applyAddressAutocompleteSuggestion(
+  suggestion: AddressAutocompleteSuggestion,
+) {
+  if (!selectedRow.value) {
+    return;
+  }
+
+  selectedRow.value.customer_address = suggestion.value;
+  markRowDirty();
+  clearAddressDistanceStateForRow(selectedRow.value.uid);
+  resetAddressAutocompleteState();
+  resolveSelectedRowAddressDistance();
+}
+
+function handleSelectedAddressKeydown(event: KeyboardEvent) {
+  if (
+    !addressAutocompleteOpen.value &&
+    event.key !== "Escape" &&
+    event.key !== "ArrowDown" &&
+    event.key !== "ArrowUp"
+  ) {
+    return;
+  }
+
+  if (addressAutocompleteSuggestions.value.length === 0) {
+    if (event.key === "Escape" && addressAutocompleteOpen.value) {
+      event.preventDefault();
+      hideAddressAutocompletePanel();
+    }
+    return;
+  }
+
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    addressAutocompleteOpen.value = true;
+    addressAutocompleteHighlightedIndex.value =
+      addressAutocompleteHighlightedIndex.value <
+      addressAutocompleteSuggestions.value.length - 1
+        ? addressAutocompleteHighlightedIndex.value + 1
+        : 0;
+    return;
+  }
+
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    addressAutocompleteOpen.value = true;
+    addressAutocompleteHighlightedIndex.value =
+      addressAutocompleteHighlightedIndex.value > 0
+        ? addressAutocompleteHighlightedIndex.value - 1
+        : addressAutocompleteSuggestions.value.length - 1;
+    return;
+  }
+
+  if (event.key === "Enter") {
+    const highlightedSuggestion =
+      addressAutocompleteSuggestions.value[
+        addressAutocompleteHighlightedIndex.value
+      ];
+    if (!highlightedSuggestion) {
+      return;
+    }
+
+    event.preventDefault();
+    applyAddressAutocompleteSuggestion(highlightedSuggestion);
+    return;
+  }
+
+  if (event.key === "Escape") {
+    event.preventDefault();
+    hideAddressAutocompletePanel();
+  }
 }
 
 function selectNextAvailableRow() {
@@ -766,6 +1017,7 @@ function resetWorkflowState() {
   advancedOptionsOpen.value = false;
   pendingDailyDateByRow.value = {};
   dailyDateInputErrorByRow.value = {};
+  resetAddressAutocompleteState();
 }
 
 async function handleFileChange(event: Event) {
@@ -1262,6 +1514,7 @@ function goToStep(step: WorkflowStep) {
 watch(selectedRowUid, () => {
   previewError.value = "";
   advancedOptionsOpen.value = false;
+  resetAddressAutocompleteState();
   tryInitialSelectedRowAddressLookup();
 });
 
@@ -1307,6 +1560,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   clearLisaPopoverTimers();
+  resetAddressAutocompleteState();
 });
 </script>
 
@@ -1343,12 +1597,15 @@ onBeforeUnmount(() => {
                     rel="noopener noreferrer"
                     @click="dismissLisaPopover"
                   >
-                    <p
-                      class="max-w-3xl text-lg leading-7 font-bold text-slate-600"
+                    <span
+                      class="block m-0 max-w-3xl text-lg font-bold text-slate-600"
                     >
                       💜 Für Lisa von Aaron 🧡
-                    </p>
-                  </a>
+                    </span>
+                    <i class="block m-0 text-xs text-center text-slate-500">
+                      Kroketti und Güscht
+                    </i></a
+                  >
                 </Badge>
               </div>
             </div>
@@ -1433,6 +1690,8 @@ onBeforeUnmount(() => {
       <ReviewStep
         v-else-if="currentStep === 'review' && hasRows"
         :advanced-open="advancedOptionsOpen"
+        :address-autocomplete-error="addressAutocompleteError"
+        :address-autocomplete-suggestions="addressAutocompleteSuggestions"
         :estimate-total="selectedRowEstimateTotal"
         :format-coordinate="formatCoordinate"
         :format-editable-money-field="formatEditableMoneyField"
@@ -1440,6 +1699,11 @@ onBeforeUnmount(() => {
         :format-kilometers="formatKilometers"
         :generated-row-count="generatedRowUids.length"
         :handle-selected-address-input="handleSelectedAddressInput"
+        :highlighted-address-suggestion-index="
+          addressAutocompleteHighlightedIndex
+        "
+        :is-address-autocomplete-loading="isAddressAutocompleteLoading"
+        :is-address-autocomplete-open="addressAutocompleteOpen"
         :is-generating="isGenerating"
         :is-preview-loading="isPreviewLoading"
         :is-resolving-selected-row-distance="isResolvingSelectedRowDistance"
@@ -1452,13 +1716,19 @@ onBeforeUnmount(() => {
         :on-next="selectNextRow"
         :on-open-download="() => goToStep('download')"
         :on-add-daily-date="addDailyDateToSelectedRow"
+        :on-address-blur="handleSelectedAddressBlur"
+        :on-address-focus="handleSelectedAddressFocus"
         :on-clear-daily-dates="clearDailyDatesForSelectedRow"
+        :on-highlight-address-suggestion="
+          highlightAddressAutocompleteSuggestion
+        "
         :on-pending-daily-date-change="setPendingDailyDateForSelectedRow"
         :on-preview="loadSelectedRowPreview"
         :on-previous="selectPreviousRow"
         :on-remove-daily-date="removeDailyDateFromSelectedRow"
-        :on-resolve-address="resolveSelectedRowAddressDistance"
+        :on-select-address-suggestion="applyAddressAutocompleteSuggestion"
         :on-select-row-at="selectRowAt"
+        :on-selected-address-keydown="handleSelectedAddressKeydown"
         :on-toggle-advanced="toggleAdvancedOptions"
         :on-validate="validateRows"
         :preview-error="previewError"

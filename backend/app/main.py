@@ -1,19 +1,24 @@
 from io import BytesIO
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 
 from app.config import MAX_CSV_BYTES
 from app.schemas import (
+    AddressAutocompleteResponse,
     AddressDistanceRequest,
     AddressDistanceResponse,
     CsvValidationResult,
     PricingRowsPayload,
 )
 from app.services.csv_parser import CsvParseError, decode_csv_content, parse_csv_rows
-from app.services.geo_routing import AddressLookupError, resolve_address_distance
+from app.services.geo_routing import (
+    AddressLookupError,
+    autocomplete_addresses,
+    resolve_address_distance,
+)
 from app.services.pricing import build_invoice_document
 from app.services.validator import validate_invoice_rows
 from app.services.zip_bundle import build_zip_bundle
@@ -68,6 +73,21 @@ def resolve_address_distance_payload(
 ) -> AddressDistanceResponse:
     try:
         return resolve_address_distance(payload.address)
+    except AddressLookupError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@app.get("/api/address/autocomplete", response_model=AddressAutocompleteResponse)
+def autocomplete_address_query(q: str = Query(...)) -> AddressAutocompleteResponse:
+    normalized_query = q.strip()
+    if len(normalized_query) < 3:
+        raise HTTPException(
+            status_code=400,
+            detail="Bitte gib mindestens drei Zeichen für die Adresssuche ein.",
+        )
+
+    try:
+        return autocomplete_addresses(normalized_query)
     except AddressLookupError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 

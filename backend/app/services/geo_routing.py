@@ -13,7 +13,12 @@ from app.config import (
     SERVICE_AREA_ORIGIN_LONGITUDE,
     SERVICE_AREA_RADIUS_KM,
 )
-from app.schemas import AddressDistanceResponse, CoordinatePoint
+from app.schemas import (
+    AddressAutocompleteResponse,
+    AddressAutocompleteSuggestion,
+    AddressDistanceResponse,
+    CoordinatePoint,
+)
 
 
 class AddressLookupError(RuntimeError):
@@ -22,6 +27,11 @@ class AddressLookupError(RuntimeError):
 
 class AddressNotFoundError(AddressLookupError):
     status_code = 404
+
+
+AUTOCOMPLETE_LIMIT = 5
+AUTOCOMPLETE_VIEWBOX_LATITUDE_DELTA = 0.25
+AUTOCOMPLETE_VIEWBOX_LONGITUDE_DELTA = 0.35
 
 
 def _fetch_json(
@@ -59,6 +69,67 @@ def _fetch_json(
         raise AddressLookupError(
             "Der Routing-Dienst hat keine gültige JSON-Antwort geliefert."
         ) from exc
+
+
+def _build_autocomplete_viewbox() -> str:
+    left = SERVICE_AREA_ORIGIN_LONGITUDE - AUTOCOMPLETE_VIEWBOX_LONGITUDE_DELTA
+    top = SERVICE_AREA_ORIGIN_LATITUDE + AUTOCOMPLETE_VIEWBOX_LATITUDE_DELTA
+    right = SERVICE_AREA_ORIGIN_LONGITUDE + AUTOCOMPLETE_VIEWBOX_LONGITUDE_DELTA
+    bottom = SERVICE_AREA_ORIGIN_LATITUDE - AUTOCOMPLETE_VIEWBOX_LATITUDE_DELTA
+    return f"{left},{top},{right},{bottom}"
+
+
+def autocomplete_addresses(query: str) -> AddressAutocompleteResponse:
+    normalized_query = query.strip()
+    response = _fetch_json(
+        NOMINATIM_BASE_URL,
+        "/search",
+        params={
+            "q": normalized_query,
+            "format": "jsonv2",
+            "limit": AUTOCOMPLETE_LIMIT,
+            "addressdetails": 1,
+            "countrycodes": "de",
+            "viewbox": _build_autocomplete_viewbox(),
+            "bounded": 0,
+            "email": SENDER_DETAILS["email"],
+        },
+        headers={"Accept-Language": "de"},
+    )
+
+    if not isinstance(response, list):
+        raise AddressLookupError(
+            "Die Autocomplete-Antwort konnte nicht verarbeitet werden."
+        )
+
+    suggestions: list[AddressAutocompleteSuggestion] = []
+    for entry in response:
+        if not isinstance(entry, dict):
+            continue
+
+        display_name = str(entry.get("display_name") or "").strip()
+        if not display_name:
+            continue
+
+        try:
+            latitude = float(entry["lat"])
+            longitude = float(entry["lon"])
+        except (KeyError, TypeError, ValueError):
+            continue
+
+        suggestions.append(
+            AddressAutocompleteSuggestion(
+                label=display_name,
+                value=display_name,
+                latitude=latitude,
+                longitude=longitude,
+            )
+        )
+
+    return AddressAutocompleteResponse(
+        query=normalized_query,
+        suggestions=suggestions[:AUTOCOMPLETE_LIMIT],
+    )
 
 
 def resolve_address_distance(address: str) -> AddressDistanceResponse:

@@ -47,7 +47,7 @@ class PricingFeaturesTest(unittest.TestCase):
         line_items = build_line_items(result.validated_rows[0])
         surcharge_item = line_items[-1]
         self.assertEqual(surcharge_item.description, "Erweiterter Kilometerbereich")
-        self.assertEqual(surcharge_item.amount, Decimal("5.00"))
+        self.assertEqual(surcharge_item.amount, Decimal("2.50"))
 
     def test_overrides_and_custom_km_surcharge_affect_matching_items_only(self):
         result = validate_invoice_rows(

@@ -21,7 +21,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   DAILY_PRICE,
@@ -32,12 +31,14 @@ import {
   TEST_RUN_PRICE,
 } from "@/lib/invoice-workflow";
 import type {
+  AddressAutocompleteSuggestion,
   AddressDistanceResult,
   CsvValidationResult,
   EditablePricingRow,
   PreviewLineItem,
   WorkflowStep,
 } from "@/lib/invoice-workflow";
+import Input from "../ui/input/Input.vue";
 
 const props = defineProps<{
   rows: EditablePricingRow[];
@@ -52,6 +53,11 @@ const props = defineProps<{
   isGenerating: boolean;
   isValidating: boolean;
   advancedOpen: boolean;
+  addressAutocompleteSuggestions: AddressAutocompleteSuggestion[];
+  addressAutocompleteError: string;
+  isAddressAutocompleteOpen: boolean;
+  isAddressAutocompleteLoading: boolean;
+  highlightedAddressSuggestionIndex: number;
   selectedRowAddressDistance: AddressDistanceResult | null;
   selectedRowAddressDistanceError: string;
   isResolvingSelectedRowDistance: boolean;
@@ -68,10 +74,16 @@ const props = defineProps<{
   onValidate: (nextStepOnSuccess?: WorkflowStep | null) => Promise<boolean>;
   onPreview: () => void;
   onGenerateSingle: () => void;
-  onResolveAddress: () => void;
   onOpenDownload: () => void;
   onPendingDailyDateChange: (value: string | number) => void;
   onAddDailyDate: () => void;
+  onAddressFocus: () => void;
+  onAddressBlur: () => void;
+  onSelectedAddressKeydown: (event: KeyboardEvent) => void;
+  onSelectAddressSuggestion: (
+    suggestion: AddressAutocompleteSuggestion,
+  ) => void;
+  onHighlightAddressSuggestion: (index: number) => void;
   onRemoveDailyDate: (date: string) => void;
   onClearDailyDates: () => void;
   markRowDirty: () => void;
@@ -543,12 +555,61 @@ const handleFormValidation = async () => {
 
             <div class="space-y-2 md:col-span-2">
               <Label for="customer-address-selected">Kundenadresse</Label>
-              <textarea
+              <Input
                 id="customer-address-selected"
                 v-model="selectedRow.customer_address"
-                class="min-h-28 w-full rounded-3xl border border-[#d8dfd3] bg-[#fcfdfb] px-4 py-3 text-sm text-slate-700 shadow-xs"
+                class="w-full rounded-3xl border border-[#d8dfd3] bg-[#fcfdfb] px-4 py-3 text-sm text-slate-700 shadow-xs"
                 @input="handleSelectedAddressInput"
+                @focus="onAddressFocus"
+                @blur="onAddressBlur"
+                @keydown="onSelectedAddressKeydown"
               />
+              <div
+                v-if="isAddressAutocompleteOpen"
+                class="overflow-hidden rounded-3xl border border-[#d8dfd3] bg-white shadow-[0_18px_40px_rgba(69,73,58,0.12)]"
+              >
+                <p
+                  v-if="isAddressAutocompleteLoading"
+                  class="px-4 py-3 text-sm text-slate-500"
+                >
+                  Adressvorschläge werden geladen...
+                </p>
+                <p
+                  v-else-if="addressAutocompleteError"
+                  class="px-4 py-3 text-sm text-rose-600"
+                >
+                  {{ addressAutocompleteError }}
+                </p>
+                <p
+                  v-else-if="
+                    selectedRow.customer_address.trim().length >= 3 &&
+                    addressAutocompleteSuggestions.length === 0
+                  "
+                  class="px-4 py-3 text-sm text-slate-500"
+                >
+                  Keine Vorschläge gefunden. Du kannst die Adresse weiter
+                  manuell eingeben.
+                </p>
+                <div v-else class="py-2">
+                  <button
+                    v-for="(
+                      suggestion, index
+                    ) in addressAutocompleteSuggestions"
+                    :key="`${suggestion.value}-${index}`"
+                    type="button"
+                    class="block w-full px-4 py-3 text-left text-sm transition"
+                    :class="
+                      index === highlightedAddressSuggestionIndex
+                        ? 'bg-[#f6f2ea] text-slate-900'
+                        : 'text-slate-700 hover:bg-[#f8f4ed]'
+                    "
+                    @mouseenter="onHighlightAddressSuggestion(index)"
+                    @mousedown.prevent="onSelectAddressSuggestion(suggestion)"
+                  >
+                    {{ suggestion.label }}
+                  </button>
+                </div>
+              </div>
               <p
                 v-if="isResolvingSelectedRowDistance"
                 class="text-xs text-slate-500"
@@ -574,29 +635,6 @@ const handleFormValidation = async () => {
                   {{ selectedRowAddressDistanceError }}
                 </AlertDescription>
               </Alert>
-              <div
-                v-if="
-                  selectedRow.customer_address.trim().length > 0 &&
-                  (selectedRowAddressDistanceError || needsAddressCheck) &&
-                  !isResolvingSelectedRowDistance
-                "
-                class="flex flex-wrap items-center gap-3 rounded-2xl border border-[#eadfc9] bg-[#fffaf1] px-4 py-3"
-              >
-                <p class="text-sm leading-6 text-slate-600">
-                  {{
-                    needsAddressCheck && !selectedRowAddressDistanceError
-                      ? "Die Adresse wurde geändert. Bitte die Prüfung erneut starten."
-                      : "Du kannst die Adressprüfung auch manuell erneut starten."
-                  }}
-                </p>
-                <Button
-                  variant="outline"
-                  class="rounded-full border-[#ddd3c3] bg-white px-4"
-                  @click="onResolveAddress"
-                >
-                  Adresse prüfen
-                </Button>
-              </div>
             </div>
           </div>
 

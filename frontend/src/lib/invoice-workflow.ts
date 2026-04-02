@@ -85,6 +85,18 @@ export type AddressDistanceResult = {
   should_apply_extended_km_surcharge: boolean;
 };
 
+export type AddressAutocompleteSuggestion = {
+  label: string;
+  value: string;
+  latitude: number;
+  longitude: number;
+};
+
+export type AddressAutocompleteResponse = {
+  query: string;
+  suggestions: AddressAutocompleteSuggestion[];
+};
+
 export const MAX_CSV_BYTES = 2 * 1024 * 1024;
 
 export const REQUIRED_COLUMNS = [

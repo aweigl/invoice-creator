@@ -280,6 +280,18 @@ class AddressDistanceRequest(BaseModel):
     address: str = Field(min_length=1)
 
 
+class AddressAutocompleteSuggestion(BaseModel):
+    label: str
+    value: str
+    latitude: float
+    longitude: float
+
+
+class AddressAutocompleteResponse(BaseModel):
+    query: str
+    suggestions: list[AddressAutocompleteSuggestion] = Field(default_factory=list)
+
+
 class CoordinatePoint(BaseModel):
     latitude: float
     longitude: float
