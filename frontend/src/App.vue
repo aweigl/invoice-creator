@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Archive, CheckCircle2, FileUp, PenLine } from "lucide-vue-next";
 
 import DownloadStep from "@/components/workflow/DownloadStep.vue";
@@ -55,6 +55,11 @@ const currentStep = ref<WorkflowStep>("upload");
 const advancedOptionsOpen = ref(false);
 const pendingDailyDateByRow = ref<Record<string, string>>({});
 const dailyDateInputErrorByRow = ref<Record<string, string>>({});
+const showLisaPopover = ref(false);
+const highlightLisaBadge = ref(false);
+
+let lisaPopoverTimeoutId: number | null = null;
+let lisaPopoverHideTimeoutId: number | null = null;
 
 const hasRows = computed(() => editableRows.value.length > 0);
 const generatedRowUidSet = computed(() => new Set(generatedRowUids.value));
@@ -1269,6 +1274,40 @@ watch(
   },
   { immediate: true },
 );
+
+function clearLisaPopoverTimers() {
+  if (lisaPopoverTimeoutId !== null) {
+    window.clearTimeout(lisaPopoverTimeoutId);
+    lisaPopoverTimeoutId = null;
+  }
+
+  if (lisaPopoverHideTimeoutId !== null) {
+    window.clearTimeout(lisaPopoverHideTimeoutId);
+    lisaPopoverHideTimeoutId = null;
+  }
+}
+
+function dismissLisaPopover() {
+  showLisaPopover.value = false;
+  highlightLisaBadge.value = false;
+  clearLisaPopoverTimers();
+}
+
+onMounted(() => {
+  lisaPopoverTimeoutId = window.setTimeout(() => {
+    showLisaPopover.value = true;
+    highlightLisaBadge.value = true;
+
+    lisaPopoverHideTimeoutId = window.setTimeout(() => {
+      showLisaPopover.value = false;
+      lisaPopoverHideTimeoutId = null;
+    }, 4_000);
+  }, 3_000);
+});
+
+onBeforeUnmount(() => {
+  clearLisaPopoverTimers();
+});
 </script>
 
 <template>
@@ -1286,14 +1325,33 @@ watch(
             <img src="/logo.png" alt="Logo" class="h-42 w-auto" />
           </div>
           <div class="space-y-4">
-            <Badge
-              variant="secondary"
-              class="w-fit rounded-full bg-[#f1e4d4] px-3 py-1 text-[#7c634b]"
-            >
-              <p class="max-w-3xl text-lg leading-7 font-bold text-slate-600">
-                💜 Für Lisa von Aaron 🧡
-              </p>
-            </Badge>
+            <div class="relative inline-flex w-fit">
+              <div
+                v-if="showLisaPopover"
+                class="pointer-events-none absolute -top-12 left-1/2 z-10 -translate-x-1/2 rounded-md bg-slate-600 px-3 py-1 text-xs font-semibold whitespace-nowrap text-white shadow-lg"
+              >
+                Click me! 👇
+              </div>
+              <div :class="{ 'animate-bounce': highlightLisaBadge }">
+                <Badge
+                  variant="secondary"
+                  class="w-fit rounded-full bg-[#f1e4d4] px-3 py-1 text-[#7c634b]"
+                >
+                  <a
+                    href="https://www.youtube.com/watch?v=5rlXJgFRCJY"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    @click="dismissLisaPopover"
+                  >
+                    <p
+                      class="max-w-3xl text-lg leading-7 font-bold text-slate-600"
+                    >
+                      💜 Für Lisa von Aaron 🧡
+                    </p>
+                  </a>
+                </Badge>
+              </div>
+            </div>
             <div class="space-y-3"></div>
           </div>
         </div>
