@@ -4,12 +4,36 @@ from typing import Any, Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
+from app.config import EXTENDED_KM_SURCHARGE_DEFAULT
+
 
 TWOPLACES = Decimal("0.01")
 
 
 def quantize_money(value: Decimal) -> Decimal:
     return value.quantize(TWOPLACES, rounding=ROUND_HALF_UP)
+
+
+def _normalize_money_like(value: object) -> object:
+    if not isinstance(value, str):
+        return value
+
+    normalized = value.strip().replace(" ", "").replace("'", "")
+    if not normalized:
+        return None
+
+    has_comma = "," in normalized
+    has_dot = "." in normalized
+
+    if has_comma and has_dot:
+        if normalized.rfind(",") > normalized.rfind("."):
+            return normalized.replace(".", "").replace(",", ".")
+        return normalized.replace(",", "")
+
+    if has_comma:
+        return normalized.replace(",", ".")
+
+    return normalized
 
 
 def _parse_daily_dates(value: str) -> list[date]:
@@ -120,6 +144,14 @@ class PricingInvoiceCsvRow(BaseModel):
     daily_dates: str = Field(default="", validate_default=True)
     daily_count_rebate: bool = False
     include_test_run: bool
+    include_extended_km_surcharge: bool = False
+    subscription_price_override: Decimal | None = Field(default=None, ge=0)
+    daily_price_override: Decimal | None = Field(default=None, ge=0)
+    test_run_price_override: Decimal | None = Field(default=None, ge=0)
+    extended_km_surcharge_amount: Decimal = Field(
+        default=EXTENDED_KM_SURCHARGE_DEFAULT,
+        ge=0,
+    )
     currency: str = Field(min_length=3, max_length=3)
 
     @field_validator("daily_dates", mode="before")
@@ -130,6 +162,28 @@ class PricingInvoiceCsvRow(BaseModel):
         if isinstance(value, str):
             return value.strip()
         return str(value).strip()
+
+    @field_validator(
+        "subscription_price_override",
+        "daily_price_override",
+        "test_run_price_override",
+        mode="before",
+    )
+    @classmethod
+    def normalize_optional_money(cls, value: object) -> object:
+        if value is None:
+            return None
+        return _normalize_money_like(value)
+
+    @field_validator("extended_km_surcharge_amount", mode="before")
+    @classmethod
+    def normalize_surcharge_amount(cls, value: object) -> object:
+        if value is None:
+            return EXTENDED_KM_SURCHARGE_DEFAULT
+        normalized = _normalize_money_like(value)
+        if normalized is None:
+            return EXTENDED_KM_SURCHARGE_DEFAULT
+        return normalized
 
     @field_validator("daily_dates")
     @classmethod

@@ -16,6 +16,7 @@ SUBSCRIPTION_PRICES = {
 DAILY_PRICE = Decimal("35.00")
 DAILY_PRICE_REBATED = Decimal("30.00")
 TEST_RUN_PRICE = Decimal("20.00")
+EXTENDED_KM_SURCHARGE_DEFAULT = Decimal("5.00")
 
 SENDER_DETAILS = {
     "name": "FREILAUF Hundebetreuung",

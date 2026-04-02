@@ -6,6 +6,7 @@ from app.config import (
     DAILY_PRICE,
     DAILY_PRICE_REBATED,
     DEFAULT_TAX_RATE,
+    EXTENDED_KM_SURCHARGE_DEFAULT,
     SUBSCRIPTION_PRICES,
     TEST_RUN_PRICE,
 )
@@ -42,7 +43,9 @@ def _format_german_date_list(values: list[date]) -> str:
 def build_line_items(row: PricingInvoiceCsvRow) -> list[PricingInvoiceLineItem]:
     items: list[PricingInvoiceLineItem] = []
 
-    subscription_price = SUBSCRIPTION_PRICES[row.subscription_plan]
+    subscription_price = row.subscription_price_override
+    if subscription_price is None:
+        subscription_price = SUBSCRIPTION_PRICES[row.subscription_plan]
     if subscription_price > 0:
         items.append(
             PricingInvoiceLineItem(
@@ -58,7 +61,9 @@ def build_line_items(row: PricingInvoiceCsvRow) -> list[PricingInvoiceLineItem]:
 
     if row.daily_count > 0:
         quantity = Decimal(str(row.daily_count))
-        daily_price = DAILY_PRICE_REBATED if row.daily_count_rebate else DAILY_PRICE
+        daily_price = row.daily_price_override
+        if daily_price is None:
+            daily_price = DAILY_PRICE_REBATED if row.daily_count_rebate else DAILY_PRICE
         items.append(
             PricingInvoiceLineItem(
                 description=f"Gassiservice für {row.dog_name}",
@@ -70,12 +75,29 @@ def build_line_items(row: PricingInvoiceCsvRow) -> list[PricingInvoiceLineItem]:
         )
 
     if row.include_test_run:
+        test_run_price = row.test_run_price_override
+        if test_run_price is None:
+            test_run_price = TEST_RUN_PRICE
         items.append(
             PricingInvoiceLineItem(
                 description=f"Probetag für {row.dog_name}",
                 quantity=Decimal("1"),
-                unit_price=TEST_RUN_PRICE,
-                amount=TEST_RUN_PRICE,
+                unit_price=test_run_price,
+                amount=test_run_price,
+            )
+        )
+
+    if row.include_extended_km_surcharge:
+        surcharge_amount = quantize_money(
+            row.extended_km_surcharge_amount or EXTENDED_KM_SURCHARGE_DEFAULT
+        )
+        items.append(
+            PricingInvoiceLineItem(
+                description="Erweiterter Kilometerbereich",
+                detail="Zuschlag fuer Anfahrt ausserhalb des Standardbereichs",
+                quantity=Decimal("1"),
+                unit_price=surcharge_amount,
+                amount=surcharge_amount,
             )
         )
 
