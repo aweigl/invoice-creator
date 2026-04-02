@@ -1,156 +1,38 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { Archive, CheckCircle2, FileUp, PenLine } from "lucide-vue-next";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import DownloadStep from "@/components/workflow/DownloadStep.vue";
+import ReviewStep from "@/components/workflow/ReviewStep.vue";
+import UploadStep from "@/components/workflow/UploadStep.vue";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-
-type SubscriptionPlan = "none" | "1x_week" | "2x_week" | "3x_week" | "4x_week";
-
-type CsvValidationError = {
-  row_number: number;
-  column: string | null;
-  message: string;
-};
-
-type PricingRow = {
-  invoice_number: string;
-  invoice_date: string;
-  due_date: string;
-  customer_name: string;
-  customer_address: string;
-  dog_name: string;
-  billing_month: string;
-  subscription_plan: SubscriptionPlan;
-  daily_count: string;
-  daily_dates: string;
-  daily_count_rebate: boolean;
-  include_test_run: boolean;
-  include_extended_km_surcharge: boolean;
-  currency: string;
-};
-
-type EditablePricingRow = PricingRow & {
-  uid: string;
-  subscription_price_override: string;
-  daily_price_override: string;
-  test_run_price_override: string;
-  extended_km_surcharge_amount: string;
-};
-
-type CsvValidationResult = {
-  filename: string;
-  total_rows: number;
-  valid_rows: number;
-  invalid_rows: number;
-  errors: CsvValidationError[];
-  validated_rows: Array<{
-    invoice_number: string;
-    invoice_date: string;
-    due_date: string;
-    customer_name: string;
-    customer_address: string;
-    dog_name: string;
-    billing_month: string;
-    subscription_plan: SubscriptionPlan;
-    daily_count: number;
-    daily_dates: string;
-    daily_count_rebate: boolean;
-    include_test_run: boolean;
-    include_extended_km_surcharge: boolean;
-    currency: string;
-  }>;
-  sample_row: PricingRow | null;
-};
-
-type PreviewLineItem = {
-  label: string;
-  detail: string;
-  amount: number;
-};
-
-type CoordinatePoint = {
-  latitude: number;
-  longitude: number;
-};
-
-type AddressDistanceResult = {
-  address: string;
-  resolved_address: string;
-  origin: CoordinatePoint;
-  destination: CoordinatePoint;
-  route_distance_meters: number;
-  route_distance_km: number;
-  included_radius_km: number;
-  should_apply_extended_km_surcharge: boolean;
-};
-
-const MAX_CSV_BYTES = 2 * 1024 * 1024;
-const REQUIRED_COLUMNS = [
-  "invoice_number",
-  "invoice_date",
-  "due_date",
-  "customer_name",
-  "customer_address",
-  "dog_name",
-  "billing_month",
-  "subscription_plan",
-  "daily_count",
-  "daily_dates",
-  "daily_count_rebate",
-  "include_test_run",
-  "currency",
-] as const;
-
-const SUBSCRIPTION_PRICES: Record<SubscriptionPlan, number> = {
-  none: 0,
-  "1x_week": 120,
-  "2x_week": 190,
-  "3x_week": 290,
-  "4x_week": 390,
-};
-
-const PLAN_LABELS: Record<SubscriptionPlan, string> = {
-  none: "Kein Abo",
-  "1x_week":
-    "Abholung Gruppenspaziergang und Heimbringen {dog_name} von/zu Ihrem Haus in Köln (Abo 1x pro Woche)",
-  "2x_week":
-    "Abholung Gruppenspaziergang und Heimbringen {dog_name} von/zu Ihrem Haus in Köln (2x pro Woche)",
-  "3x_week":
-    "Abholung Gruppenspaziergang und Heimbringen {dog_name} von/zu Ihrem Haus in Köln (3x pro Woche)",
-  "4x_week":
-    "Abholung Gruppenspaziergang und Heimbringen {dog_name} von/zu Ihrem Haus in Köln (4x pro Woche)",
-};
-
-const DAILY_PRICE = 35;
-const DAILY_PRICE_REBATED = 30;
-const TEST_RUN_PRICE = 20;
-const DEFAULT_EXTENDED_KM_SURCHARGE_AMOUNT = 5.0;
-const SERVICE_AREA_RADIUS_KM = 17;
-const CSV_DELIMITERS = [";", ","] as const;
-const SAMPLE_CSV_DOWNLOAD_PATH = `${import.meta.env.BASE_URL}invoice-pricing-example.csv`;
+  PLAN_LABELS,
+  CSV_DELIMITERS,
+  DAILY_PRICE,
+  DAILY_PRICE_REBATED,
+  DEFAULT_EXTENDED_KM_SURCHARGE_AMOUNT,
+  MAX_CSV_BYTES,
+  REQUIRED_COLUMNS,
+  SAMPLE_CSV_DOWNLOAD_PATH,
+  SERVICE_AREA_RADIUS_KM,
+  SUBSCRIPTION_PRICES,
+  TEST_RUN_PRICE,
+} from "@/lib/invoice-workflow";
+import type {
+  AddressDistanceResult,
+  CsvValidationError,
+  CsvValidationResult,
+  EditablePricingRow,
+  PreviewLineItem,
+  PricingRow,
+  SubscriptionPlan,
+  WorkflowStep,
+} from "@/lib/invoice-workflow";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
 const selectedFileName = ref("");
-const csvContent = ref("");
 const localHeaders = ref<string[]>([]);
 const localRowCount = ref(0);
 const editableRows = ref<EditablePricingRow[]>([]);
@@ -166,7 +48,13 @@ const generatedRowUids = ref<string[]>([]);
 const previewError = ref("");
 const distanceLookupResults = ref<Record<string, AddressDistanceResult>>({});
 const distanceLookupErrors = ref<Record<string, string>>({});
+const lastCheckedAddressByRow = ref<Record<string, string>>({});
+const attemptedAddressLookupByRow = ref<Record<string, boolean>>({});
 const resolvingDistanceRowUid = ref("");
+const currentStep = ref<WorkflowStep>("upload");
+const advancedOptionsOpen = ref(false);
+const pendingDailyDateByRow = ref<Record<string, string>>({});
+const dailyDateInputErrorByRow = ref<Record<string, string>>({});
 
 const hasRows = computed(() => editableRows.value.length > 0);
 const generatedRowUidSet = computed(() => new Set(generatedRowUids.value));
@@ -179,11 +67,34 @@ const selectedRow = computed(
 );
 const selectedRowAddressDistance = computed(() =>
   selectedRow.value
-    ? distanceLookupResults.value[selectedRow.value.uid] ?? null
+    ? (distanceLookupResults.value[selectedRow.value.uid] ?? null)
     : null,
 );
 const selectedRowAddressDistanceError = computed(() =>
-  selectedRow.value ? distanceLookupErrors.value[selectedRow.value.uid] ?? "" : "",
+  selectedRow.value
+    ? (distanceLookupErrors.value[selectedRow.value.uid] ?? "")
+    : "",
+);
+const selectedRowNeedsAddressCheck = computed(() => {
+  if (!selectedRow.value) {
+    return false;
+  }
+
+  const address = selectedRow.value.customer_address.trim();
+  if (!address) {
+    return false;
+  }
+
+  return lastCheckedAddressByRow.value[selectedRow.value.uid] !== address;
+});
+const selectedDailyDates = computed(() =>
+  selectedRow.value ? parseDailyDates(selectedRow.value.daily_dates) : [],
+);
+const selectedPendingDailyDate = computed(() =>
+  selectedRow.value ? (pendingDailyDateByRow.value[selectedRow.value.uid] ?? "") : "",
+);
+const selectedDailyDateInputError = computed(() =>
+  selectedRow.value ? (dailyDateInputErrorByRow.value[selectedRow.value.uid] ?? "") : "",
 );
 const isResolvingSelectedRowDistance = computed(
   () =>
@@ -213,6 +124,104 @@ const canGenerate = computed(
     hasRows.value &&
     !isGenerating.value,
 );
+
+const canAccessReview = computed(() => hasRows.value);
+const canAccessDownload = computed(() => hasRows.value);
+
+const uploadValidationMessage = computed(() => {
+  if (isValidating.value) {
+    return "Datei wird automatisch geprueft.";
+  }
+
+  if (fileError.value) {
+    return "Bitte eine passende CSV hochladen.";
+  }
+
+  if (serverError.value && currentStep.value === "upload") {
+    return "Pruefung konnte nicht abgeschlossen werden.";
+  }
+
+  if (!hasRows.value) {
+    return "Bereit fuer deine CSV-Datei.";
+  }
+
+  if (!validationResult.value) {
+    return "Datei eingelesen. Eine Pruefung steht noch aus.";
+  }
+
+  if (!validationIsCurrent.value) {
+    return "Datei eingelesen. Aenderungen bitte erneut pruefen.";
+  }
+
+  if (validationResult.value.invalid_rows > 0) {
+    return `${validationResult.value.invalid_rows} Rechnung(en) brauchen noch Aufmerksamkeit.`;
+  }
+
+  return "Datei erfolgreich geprueft. Du kannst weitermachen.";
+});
+
+const reviewReady = computed(
+  () =>
+    validationResult.value !== null &&
+    validationIsCurrent.value &&
+    validationResult.value.invalid_rows === 0,
+);
+
+const selectedRowLabel = computed(() =>
+  selectedRow.value
+    ? `${selectedRow.value.customer_name || "Ohne Kundenname"} · ${selectedRow.value.invoice_number || "Ohne Rechnungsnummer"}`
+    : "Keine Rechnung ausgewaehlt",
+);
+
+const selectedRowPreviewItems = computed(() =>
+  selectedRow.value ? previewLineItems(selectedRow.value) : [],
+);
+const selectedRowEstimateTotal = computed(() =>
+  selectedRow.value ? estimateTotal(selectedRow.value) : 0,
+);
+
+const canPreviewSelectedRow = computed(
+  () =>
+    selectedRow.value !== null &&
+    validationIsCurrent.value &&
+    selectedRowIndex.value >= 0 &&
+    !rowHasErrors(selectedRowIndex.value),
+);
+
+const canGenerateSelectedRow = computed(
+  () =>
+    selectedRow.value !== null &&
+    canPreviewSelectedRow.value &&
+    !isRowGenerated(selectedRow.value.uid),
+);
+
+const workflowSteps = computed<
+  Array<{
+    key: WorkflowStep;
+    label: string;
+    hint: string;
+    icon: typeof FileUp;
+  }>
+>(() => [
+  {
+    key: "upload",
+    label: "CSV hochladen",
+    hint: hasRows.value ? "Datei bereit" : "Datei waehlen",
+    icon: FileUp,
+  },
+  {
+    key: "review",
+    label: "Rechnungen pruefen",
+    hint: reviewReady.value ? "Bereit" : "Bearbeiten",
+    icon: PenLine,
+  },
+  {
+    key: "download",
+    label: "PDFs herunterladen",
+    hint: canGenerate.value ? "ZIP bereit" : "Letzter Schritt",
+    icon: Archive,
+  },
+]);
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) {
@@ -287,6 +296,10 @@ function parseDailyDates(value: string): string[] {
   return parts;
 }
 
+function serializeDailyDates(values: string[]): string {
+  return values.join(",");
+}
+
 function formatGermanDateList(value: string): string {
   const parsedDates = parseDailyDates(value);
   if (parsedDates.length === 0) {
@@ -303,6 +316,83 @@ function formatGermanDateList(value: string): string {
   }
 
   return `${formattedDates.slice(0, -1).join(", ")} und ${formattedDates[formattedDates.length - 1]}`;
+}
+
+function syncDailyDatesForRow(row: EditablePricingRow, dates: string[]) {
+  row.daily_dates = serializeDailyDates(dates);
+  row.daily_count = String(dates.length);
+  markRowDirty();
+}
+
+function clearDailyDateInputError(uid: string) {
+  const { [uid]: _removed, ...remainingErrors } = dailyDateInputErrorByRow.value;
+  dailyDateInputErrorByRow.value = remainingErrors;
+}
+
+function setPendingDailyDateForSelectedRow(value: string | number) {
+  if (!selectedRow.value) {
+    return;
+  }
+
+  pendingDailyDateByRow.value = {
+    ...pendingDailyDateByRow.value,
+    [selectedRow.value.uid]: String(value),
+  };
+  clearDailyDateInputError(selectedRow.value.uid);
+}
+
+function addDailyDateToSelectedRow() {
+  if (!selectedRow.value) {
+    return;
+  }
+
+  const rowUid = selectedRow.value.uid;
+  const pendingValue = (pendingDailyDateByRow.value[rowUid] ?? "").trim();
+
+  if (!pendingValue) {
+    dailyDateInputErrorByRow.value = {
+      ...dailyDateInputErrorByRow.value,
+      [rowUid]: "Bitte zuerst einen Termin auswaehlen.",
+    };
+    return;
+  }
+
+  const currentDates = parseDailyDates(selectedRow.value.daily_dates);
+  if (currentDates.includes(pendingValue)) {
+    dailyDateInputErrorByRow.value = {
+      ...dailyDateInputErrorByRow.value,
+      [rowUid]: "Dieser Termin ist bereits vorhanden.",
+    };
+    return;
+  }
+
+  syncDailyDatesForRow(selectedRow.value, [...currentDates, pendingValue]);
+  pendingDailyDateByRow.value = {
+    ...pendingDailyDateByRow.value,
+    [rowUid]: "",
+  };
+  clearDailyDateInputError(rowUid);
+}
+
+function removeDailyDateFromSelectedRow(dateValue: string) {
+  if (!selectedRow.value) {
+    return;
+  }
+
+  const nextDates = parseDailyDates(selectedRow.value.daily_dates).filter(
+    (entry) => entry !== dateValue,
+  );
+  syncDailyDatesForRow(selectedRow.value, nextDates);
+  clearDailyDateInputError(selectedRow.value.uid);
+}
+
+function clearDailyDatesForSelectedRow() {
+  if (!selectedRow.value) {
+    return;
+  }
+
+  syncDailyDatesForRow(selectedRow.value, []);
+  clearDailyDateInputError(selectedRow.value.uid);
 }
 
 function detectCsvDelimiter(content: string): string {
@@ -530,6 +620,10 @@ function validationErrorsForField(rowIndex: number, field: string): string[] {
 }
 
 function rowHasErrors(rowIndex: number): boolean {
+  if (rowIndex < 0) {
+    return false;
+  }
+
   return validationErrorsForRow(rowIndex).length > 0;
 }
 
@@ -627,30 +721,26 @@ function clearAddressDistanceStateForRow(uid: string) {
 }
 
 function handleSelectedAddressInput() {
-  markRowDirty();
-
-  if (selectedRow.value) {
-    clearAddressDistanceStateForRow(selectedRow.value.uid);
+  if (!selectedRow.value) {
+    markRowDirty();
+    return;
   }
+
+  markRowDirty();
+  clearAddressDistanceStateForRow(selectedRow.value.uid);
 }
 
 function selectNextAvailableRow() {
   const nextRow = editableRows.value.find(
     (row) => !generatedRowUidSet.value.has(row.uid),
   );
-  selectedRowUid.value = nextRow?.uid ?? "";
+  selectedRowUid.value = nextRow?.uid ?? editableRows.value[0]?.uid ?? "";
 }
 
-async function handleFileChange(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-
-  fileError.value = "";
-  serverError.value = "";
+function resetWorkflowState() {
   validationResult.value = null;
   lastValidatedSnapshot.value = "";
   selectedFileName.value = "";
-  csvContent.value = "";
   localHeaders.value = [];
   localRowCount.value = 0;
   editableRows.value = [];
@@ -659,7 +749,22 @@ async function handleFileChange(event: Event) {
   previewError.value = "";
   distanceLookupResults.value = {};
   distanceLookupErrors.value = {};
+  lastCheckedAddressByRow.value = {};
+  attemptedAddressLookupByRow.value = {};
   resolvingDistanceRowUid.value = "";
+  currentStep.value = "upload";
+  advancedOptionsOpen.value = false;
+  pendingDailyDateByRow.value = {};
+  dailyDateInputErrorByRow.value = {};
+}
+
+async function handleFileChange(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+
+  fileError.value = "";
+  serverError.value = "";
+  resetWorkflowState();
 
   if (!file) {
     return;
@@ -680,8 +785,14 @@ async function handleFileChange(event: Event) {
   const content = await file.text();
   const parsed = parseCsvContent(content);
 
+  if (parsed.headers.length === 0 || parsed.rows.length === 0) {
+    fileError.value =
+      "Die CSV-Datei konnte nicht gelesen werden oder enthaelt keine Rechnungszeilen.";
+    input.value = "";
+    return;
+  }
+
   selectedFileName.value = file.name;
-  csvContent.value = content;
   localHeaders.value = parsed.headers;
   localRowCount.value = parsed.rows.length;
   editableRows.value = parsed.rows.map((row, index) => ({
@@ -693,13 +804,18 @@ async function handleFileChange(event: Event) {
     extended_km_surcharge_amount: "",
   }));
   selectedRowUid.value = editableRows.value[0]?.uid ?? "";
+
+  const validationSucceeded = await validateRows("review");
+  if (!validationSucceeded) {
+    currentStep.value = "upload";
+  }
 }
 
-async function validateRows() {
+async function validateRows(nextStepOnSuccess: WorkflowStep | null = null) {
   if (!hasRows.value) {
     fileError.value =
       "Bitte lade zuerst eine CSV-Datei mit Rechnungszeilen hoch.";
-    return;
+    return false;
   }
 
   isValidating.value = true;
@@ -728,11 +844,18 @@ async function validateRows() {
 
     validationResult.value = (await response.json()) as CsvValidationResult;
     lastValidatedSnapshot.value = currentRowsSnapshot.value;
+
+    if (nextStepOnSuccess) {
+      currentStep.value = nextStepOnSuccess;
+    }
+
+    return true;
   } catch (error) {
     validationResult.value = null;
     lastValidatedSnapshot.value = "";
     serverError.value =
       error instanceof Error ? error.message : "Unbekannter Serverfehler.";
+    return false;
   } finally {
     isValidating.value = false;
   }
@@ -741,7 +864,7 @@ async function validateRows() {
 async function generateInvoices() {
   if (!canGenerate.value) {
     serverError.value =
-      "Bitte validiere die aktuellen Zeilen erfolgreich, bevor du PDFs erzeugst.";
+      "Bitte pruefe die aktuellen Daten erfolgreich, bevor du die ZIP-Datei erstellst.";
     return;
   }
 
@@ -835,6 +958,10 @@ async function resolveSelectedRowAddressDistance() {
   const rowUid = selectedRow.value.uid;
   const address = selectedRow.value.customer_address.trim();
   clearAddressDistanceStateForRow(rowUid);
+  attemptedAddressLookupByRow.value = {
+    ...attemptedAddressLookupByRow.value,
+    [rowUid]: true,
+  };
 
   if (!address) {
     distanceLookupErrors.value = {
@@ -860,7 +987,8 @@ async function resolveSelectedRowAddressDistance() {
         detail?: string;
       } | null;
       throw new Error(
-        payload?.detail ?? `Distanzberechnung fehlgeschlagen (${response.status})`,
+        payload?.detail ??
+          `Distanzberechnung fehlgeschlagen (${response.status})`,
       );
     }
 
@@ -868,6 +996,10 @@ async function resolveSelectedRowAddressDistance() {
     distanceLookupResults.value = {
       ...distanceLookupResults.value,
       [rowUid]: result,
+    };
+    lastCheckedAddressByRow.value = {
+      ...lastCheckedAddressByRow.value,
+      [rowUid]: address,
     };
 
     const { [rowUid]: _error, ...remainingErrors } = distanceLookupErrors.value;
@@ -882,6 +1014,10 @@ async function resolveSelectedRowAddressDistance() {
     markRowDirty();
   } catch (error) {
     clearAddressDistanceStateForRow(rowUid);
+    lastCheckedAddressByRow.value = {
+      ...lastCheckedAddressByRow.value,
+      [rowUid]: address,
+    };
     distanceLookupErrors.value = {
       ...distanceLookupErrors.value,
       [rowUid]:
@@ -896,6 +1032,28 @@ async function resolveSelectedRowAddressDistance() {
   }
 }
 
+function tryInitialSelectedRowAddressLookup() {
+  if (!selectedRow.value) {
+    return;
+  }
+
+  const rowUid = selectedRow.value.uid;
+  const address = selectedRow.value.customer_address.trim();
+  if (!address) {
+    clearAddressDistanceStateForRow(rowUid);
+    return;
+  }
+
+  if (
+    lastCheckedAddressByRow.value[rowUid] === address &&
+    attemptedAddressLookupByRow.value[rowUid]
+  ) {
+    return;
+  }
+
+  void resolveSelectedRowAddressDistance();
+}
+
 async function generateSelectedRowPdf() {
   if (!selectedRow.value) {
     serverError.value = "Bitte waehle zuerst eine Rechnungszeile aus.";
@@ -903,19 +1061,19 @@ async function generateSelectedRowPdf() {
   }
 
   if (isRowGenerated(selectedRow.value.uid)) {
-    serverError.value = "Fuer diese Zeile wurde das PDF bereits erstellt.";
+    serverError.value = "Fuer diese Rechnung wurde das PDF bereits erstellt.";
     return;
   }
 
   if (!validationIsCurrent.value) {
     serverError.value =
-      "Bitte validiere die aktuellen Daten erneut, bevor du ein PDF erzeugst.";
+      "Bitte pruefe die aktuellen Daten erneut, bevor du ein PDF erzeugst.";
     return;
   }
 
   if (rowHasErrors(selectedRowIndex.value)) {
     serverError.value =
-      "Die ausgewaehlte Zeile enthaelt noch Validierungsfehler.";
+      "Die ausgewaehlte Rechnung enthaelt noch Validierungsfehler.";
     return;
   }
 
@@ -973,13 +1131,13 @@ async function loadSelectedRowPreview() {
 
   if (!validationIsCurrent.value) {
     previewError.value =
-      "Bitte validiere die aktuellen Daten erneut, bevor du die PDF-Vorschau laedst.";
+      "Bitte pruefe die aktuellen Daten erneut, bevor du die PDF-Vorschau laedst.";
     return;
   }
 
   if (rowHasErrors(selectedRowIndex.value)) {
     previewError.value =
-      "Die ausgewaehlte Zeile enthaelt noch Validierungsfehler.";
+      "Die ausgewaehlte Rechnung enthaelt noch Validierungsfehler.";
     return;
   }
 
@@ -1043,961 +1201,240 @@ async function loadSelectedRowPreview() {
   }
 }
 
+function selectRowAt(index: number) {
+  const row = editableRows.value[index];
+  if (!row) {
+    return;
+  }
+
+  selectedRowUid.value = row.uid;
+}
+
+function selectPreviousRow() {
+  if (selectedRowIndex.value > 0) {
+    selectRowAt(selectedRowIndex.value - 1);
+  }
+}
+
+function selectNextRow() {
+  if (
+    selectedRowIndex.value >= 0 &&
+    selectedRowIndex.value < editableRows.value.length - 1
+  ) {
+    selectRowAt(selectedRowIndex.value + 1);
+  }
+}
+
+function toggleAdvancedOptions() {
+  advancedOptionsOpen.value = !advancedOptionsOpen.value;
+}
+
+function goToStep(step: WorkflowStep) {
+  if (step === "upload") {
+    currentStep.value = step;
+    return;
+  }
+
+  if (step === "review" && canAccessReview.value) {
+    currentStep.value = step;
+    return;
+  }
+
+  if (step === "download" && canAccessDownload.value) {
+    currentStep.value = step;
+  }
+}
+
 watch(selectedRowUid, () => {
   previewError.value = "";
+  advancedOptionsOpen.value = false;
+  tryInitialSelectedRowAddressLookup();
 });
+
+watch(
+  hasRows,
+  (value) => {
+    if (!value) {
+      currentStep.value = "upload";
+    }
+  },
+  { immediate: true },
+);
+
 </script>
 
 <template>
   <main
-    class="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(255,214,153,0.28),transparent_28%),linear-gradient(135deg,#fffdf8_0%,#f6f8fb_52%,#eef6ef_100%)]"
+    class="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(222,198,166,0.42),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(189,205,186,0.32),transparent_30%),linear-gradient(180deg,#fdf9f3_0%,#f8f1e5_48%,#f0f4ec_100%)]"
   >
     <div
-      class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-8 md:py-10"
+      class="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 md:px-8 md:py-10"
     >
-      <section>
-        <Card class="border-white/60 bg-white/88 shadow-lg backdrop-blur">
-          <CardHeader>
-            <Badge variant="outline" class="mb-3 w-fit bg-white/80">
-              Validieren, bearbeiten, erzeugen
+      <section
+        class="rounded-[2rem] border border-white/70 bg-white/78 p-5 shadow-[0_30px_80px_rgba(69,73,58,0.1)] backdrop-blur md:p-8"
+      >
+        <div class="flex justify-between">
+          <div>
+            <img src="/logo.png" alt="Logo" class="h-30 w-auto" />
+          </div>
+          <div class="space-y-4">
+            <Badge
+              variant="secondary"
+              class="w-fit rounded-full bg-[#f1e4d4] px-3 py-1 text-[#7c634b]"
+            >
+              <p class="max-w-3xl text-lg leading-7 font-bold text-slate-600">
+                💜 Für Lisa von Aaron 🧡
+              </p>
             </Badge>
-            <CardTitle class="text-3xl tracking-tight md:text-5xl">
-              CSV hochladen, Zeilen pruefen und erst dann Rechnungs-PDFs
-              erstellen.
-            </CardTitle>
-            <CardDescription class="max-w-2xl text-base text-slate-600">
-              Nach dem Upload kannst du jede Rechnungszeile bearbeiten. Erst
-              wenn die aktuelle Version fehlerfrei validiert ist, wird die
-              ZIP-Datei mit allen PDF-Rechnungen erzeugt.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      </section>
+            <div class="space-y-3"></div>
+          </div>
+        </div>
 
-      <section class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <Card class="border-white/60 bg-white/88 shadow-lg backdrop-blur">
-          <CardHeader>
-            <CardTitle>CSV-Datei laden</CardTitle>
-            <CardDescription>
-              Das aktuelle Preismodell erwartet genau diese Spalten.
-            </CardDescription>
-          </CardHeader>
-          <CardContent class="space-y-6">
-            <div class="space-y-2">
-              <Label for="csv-upload">CSV-Datei</Label>
-              <Input
-                id="csv-upload"
-                type="file"
-                accept=".csv,text/csv"
-                class="bg-white"
-                @change="handleFileChange"
+        <div class="mt-8 grid gap-3 md:grid-cols-3">
+          <button
+            v-for="(step, index) in workflowSteps"
+            :key="step.key"
+            type="button"
+            class="group rounded-[1.5rem] border px-4 py-4 text-left transition md:px-5"
+            :class="
+              currentStep === step.key
+                ? 'border-[#5d7253] bg-[#5d7253] text-white shadow-lg shadow-[#5d7253]/20'
+                : (step.key === 'review' && !canAccessReview) ||
+                    (step.key === 'download' && !canAccessDownload)
+                  ? 'cursor-not-allowed border-white/60 bg-white/55 text-slate-400'
+                  : 'border-white/70 bg-white/70 text-slate-800 hover:-translate-y-0.5 hover:bg-white'
+            "
+            :disabled="
+              (step.key === 'review' && !canAccessReview) ||
+              (step.key === 'download' && !canAccessDownload)
+            "
+            @click="goToStep(step.key)"
+          >
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <p
+                  class="text-xs font-semibold uppercase tracking-[0.18em]"
+                  :class="
+                    currentStep === step.key
+                      ? 'text-white/75'
+                      : 'text-slate-500'
+                  "
+                >
+                  Schritt {{ index + 1 }}
+                </p>
+                <p class="mt-2 text-lg font-semibold">
+                  {{ step.label }}
+                </p>
+                <p
+                  class="mt-1 text-sm leading-6"
+                  :class="
+                    currentStep === step.key
+                      ? 'text-white/85'
+                      : 'text-slate-500'
+                  "
+                >
+                  {{ step.hint }}
+                </p>
+              </div>
+              <component
+                :is="step.icon"
+                class="size-5"
+                :class="
+                  currentStep === step.key ? 'text-white' : 'text-slate-400'
+                "
               />
             </div>
-
-            <div class="flex flex-wrap gap-3">
-              <Button
-                as="a"
-                :href="SAMPLE_CSV_DOWNLOAD_PATH"
-                download="invoice-pricing-example.csv"
-                variant="outline"
-              >
-                Beispiel-CSV herunterladen
-              </Button>
-              <p class="self-center text-sm text-slate-500">
-                Enthält auch die optionale Spalte
-                <code>include_extended_km_surcharge</code>.
-              </p>
-            </div>
-
-            <div class="flex flex-wrap gap-2">
-              <Badge
-                v-for="column in REQUIRED_COLUMNS"
-                :key="column"
-                variant="secondary"
-                class="bg-slate-100 text-slate-700"
-              >
-                {{ column }}
-              </Badge>
-            </div>
-
-            <Alert v-if="fileError" variant="destructive">
-              <AlertTitle>Dateifehler</AlertTitle>
-              <AlertDescription>{{ fileError }}</AlertDescription>
-            </Alert>
-
-            <Alert v-if="serverError" variant="destructive">
-              <AlertTitle>Serverfehler</AlertTitle>
-              <AlertDescription>{{ serverError }}</AlertDescription>
-            </Alert>
-
-            <div
-              v-if="hasRows"
-              class="grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-3"
-            >
-              <div>
-                <p
-                  class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500"
-                >
-                  Datei
-                </p>
-                <p class="mt-1 text-sm font-medium text-slate-900">
-                  {{ selectedFileName }}
-                </p>
-              </div>
-              <div>
-                <p
-                  class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500"
-                >
-                  Zeilen
-                </p>
-                <p class="mt-1 text-sm font-medium text-slate-900">
-                  {{ localRowCount }}
-                </p>
-              </div>
-              <div>
-                <p
-                  class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500"
-                >
-                  Spalten
-                </p>
-                <p class="mt-1 text-sm font-medium text-slate-900">
-                  {{ localHeaders.length }}
-                </p>
-              </div>
-            </div>
-
-            <div class="flex flex-wrap gap-3">
-              <Button
-                :disabled="!hasRows || isValidating"
-                @click="validateRows"
-              >
-                {{
-                  isValidating
-                    ? "Zeilen werden validiert..."
-                    : "Aktuelle Zeilen validieren"
-                }}
-              </Button>
-              <Button
-                variant="outline"
-                :disabled="!canGenerate"
-                @click="generateInvoices"
-              >
-                {{
-                  isGenerating
-                    ? "PDFs werden erzeugt..."
-                    : "PDF-Rechnungen als ZIP erzeugen"
-                }}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card class="border-white/60 bg-white/88 shadow-lg backdrop-blur">
-          <CardHeader>
-            <CardTitle>Validierungsstatus</CardTitle>
-            <CardDescription>
-              Bearbeitete Daten muessen erneut geprueft werden, bevor die
-              PDF-Erstellung aktiv ist.
-            </CardDescription>
-          </CardHeader>
-          <CardContent class="space-y-4">
-            <div
-              v-if="!validationResult"
-              class="rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500"
-            >
-              Noch keine Validierung ausgefuehrt.
-            </div>
-
-            <template v-else>
-              <div class="grid gap-4 md:grid-cols-3">
-                <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <p
-                    class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500"
-                  >
-                    Gesamt
-                  </p>
-                  <p class="mt-2 text-2xl font-semibold text-slate-900">
-                    {{ validationResult.total_rows }}
-                  </p>
-                </div>
-                <div
-                  class="rounded-xl border border-emerald-200 bg-emerald-50 p-4"
-                >
-                  <p
-                    class="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700"
-                  >
-                    Gueltig
-                  </p>
-                  <p class="mt-2 text-2xl font-semibold text-emerald-900">
-                    {{ validationResult.valid_rows }}
-                  </p>
-                </div>
-                <div class="rounded-xl border border-rose-200 bg-rose-50 p-4">
-                  <p
-                    class="text-xs font-semibold uppercase tracking-[0.16em] text-rose-700"
-                  >
-                    Fehlerhaft
-                  </p>
-                  <p class="mt-2 text-2xl font-semibold text-rose-900">
-                    {{ validationResult.invalid_rows }}
-                  </p>
-                </div>
-              </div>
-
-              <Alert
-                :variant="
-                  validationResult.invalid_rows > 0 ? 'destructive' : 'default'
-                "
-                :class="
-                  validationResult.invalid_rows === 0
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-950'
-                    : ''
-                "
-              >
-                <AlertTitle>
-                  {{
-                    validationIsCurrent
-                      ? validationResult.invalid_rows === 0
-                        ? "Aktuelle Zeilen sind gueltig"
-                        : "Aktuelle Zeilen enthalten Fehler"
-                      : "Validierung ist veraltet"
-                  }}
-                </AlertTitle>
-                <AlertDescription>
-                  {{
-                    validationIsCurrent
-                      ? validationResult.invalid_rows === 0
-                        ? "Du kannst jetzt einzelne PDFs oder die gesamte ZIP-Datei erzeugen."
-                        : "Bitte korrigiere die markierten Felder und validiere erneut."
-                      : "Seit der letzten Validierung wurden Werte geaendert. Bitte erneut pruefen."
-                  }}
-                </AlertDescription>
-              </Alert>
-
-              <div
-                v-if="validationResult.errors.length > 0"
-                class="overflow-hidden rounded-xl border border-slate-200"
-              >
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead class="w-24">Zeile</TableHead>
-                      <TableHead class="w-40">Spalte</TableHead>
-                      <TableHead>Fehler</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow
-                      v-for="error in validationResult.errors"
-                      :key="`${error.row_number}-${error.column}-${error.message}`"
-                    >
-                      <TableCell>{{ error.row_number }}</TableCell>
-                      <TableCell>{{ error.column ?? "Allgemein" }}</TableCell>
-                      <TableCell>{{ error.message }}</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            </template>
-          </CardContent>
-        </Card>
+          </button>
+        </div>
       </section>
 
-      <section v-if="hasRows" class="space-y-4">
-        <div class="flex items-center justify-between gap-4">
-          <div>
-            <h2 class="text-2xl font-semibold tracking-tight text-slate-950">
-              Einzelne Rechnungszeile bearbeiten
-            </h2>
-            <p class="text-sm text-slate-600">
-              Waehle eine Zeile aus. Bereits erzeugte PDFs werden im Auswahlfeld
-              deaktiviert.
-            </p>
-          </div>
-          <Badge variant="outline" class="bg-white/80">
-            {{ editableRows.length }} Zeile(n) ·
-            {{ generatedRowUids.length }} PDF(s) erzeugt
-          </Badge>
-        </div>
+      <UploadStep
+        v-if="currentStep === 'upload'"
+        :file-error="fileError"
+        :has-rows="hasRows"
+        :is-validating="isValidating"
+        :local-headers-count="localHeaders.length"
+        :local-row-count="localRowCount"
+        :on-continue="() => goToStep('review')"
+        :on-file-change="handleFileChange"
+        :required-columns="REQUIRED_COLUMNS"
+        :sample-csv-download-path="SAMPLE_CSV_DOWNLOAD_PATH"
+        :selected-file-name="selectedFileName"
+        :server-error="serverError"
+        :validation-message="uploadValidationMessage"
+      />
 
-        <Card class="border-white/60 bg-white/88 shadow-lg backdrop-blur">
-          <CardHeader>
-            <div class="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
-              <div class="space-y-2">
-                <Label for="row-select">Rechnungszeile auswaehlen</Label>
-                <select
-                  id="row-select"
-                  v-model="selectedRowUid"
-                  class="border-input bg-background flex h-10 w-full rounded-md border px-3 py-2 text-sm shadow-xs"
-                >
-                  <option
-                    v-for="(row, index) in editableRows"
-                    :key="row.uid"
-                    :value="row.uid"
-                    :disabled="isRowGenerated(row.uid)"
-                  >
-                    Zeile {{ index + 2 }} ·
-                    {{ row.invoice_number || "Ohne Rechnungsnummer" }} ·
-                    {{ row.customer_name || "Ohne Kundenname"
-                    }}{{ isRowGenerated(row.uid) ? " · PDF erstellt" : "" }}
-                  </option>
-                </select>
-              </div>
-              <Button
-                variant="secondary"
-                :disabled="!selectedRow || isPreviewLoading"
-                @click="loadSelectedRowPreview"
-              >
-                {{
-                  isPreviewLoading
-                    ? "Vorschau wird geladen..."
-                    : "PDF-Vorschau laden"
-                }}
-              </Button>
-              <Button
-                variant="outline"
-                :disabled="
-                  !selectedRow ||
-                  isGenerating ||
-                  (selectedRow ? isRowGenerated(selectedRow.uid) : true)
-                "
-                @click="generateSelectedRowPdf"
-              >
-                {{
-                  isGenerating
-                    ? "PDF wird erzeugt..."
-                    : selectedRow && isRowGenerated(selectedRow.uid)
-                      ? "PDF bereits erstellt"
-                      : "PDF fuer diese Zeile erzeugen"
-                }}
-              </Button>
-            </div>
-          </CardHeader>
-        </Card>
+      <ReviewStep
+        v-else-if="currentStep === 'review' && hasRows"
+        :advanced-open="advancedOptionsOpen"
+        :estimate-total="selectedRowEstimateTotal"
+        :format-coordinate="formatCoordinate"
+        :format-editable-money-field="formatEditableMoneyField"
+        :format-euro="formatEuro"
+        :format-kilometers="formatKilometers"
+        :generated-row-count="generatedRowUids.length"
+        :handle-selected-address-input="handleSelectedAddressInput"
+        :is-generating="isGenerating"
+        :is-preview-loading="isPreviewLoading"
+        :is-resolving-selected-row-distance="isResolvingSelectedRowDistance"
+        :is-row-generated="isRowGenerated"
+        :is-validating="isValidating"
+        :mark-row-dirty="markRowDirty"
+        :needs-address-check="selectedRowNeedsAddressCheck"
+        :daily-date-input-error="selectedDailyDateInputError"
+        :on-generate-single="generateSelectedRowPdf"
+        :on-next="selectNextRow"
+        :on-open-download="() => goToStep('download')"
+        :on-add-daily-date="addDailyDateToSelectedRow"
+        :on-clear-daily-dates="clearDailyDatesForSelectedRow"
+        :on-pending-daily-date-change="setPendingDailyDateForSelectedRow"
+        :on-preview="loadSelectedRowPreview"
+        :on-previous="selectPreviousRow"
+        :on-remove-daily-date="removeDailyDateFromSelectedRow"
+        :on-resolve-address="resolveSelectedRowAddressDistance"
+        :on-select-row-at="selectRowAt"
+        :on-toggle-advanced="toggleAdvancedOptions"
+        :on-validate="() => validateRows()"
+        :preview-error="previewError"
+        :preview-items="selectedRowPreviewItems"
+        :pending-daily-date="selectedPendingDailyDate"
+        :row-has-errors="rowHasErrors"
+        :rows="editableRows"
+        :selected-daily-dates="selectedDailyDates"
+        :selected-row="selectedRow"
+        :selected-row-address-distance="selectedRowAddressDistance"
+        :selected-row-address-distance-error="selectedRowAddressDistanceError"
+        :selected-row-index="selectedRowIndex"
+        :server-error="serverError"
+        :validation-errors-for-field="validationErrorsForField"
+        :validation-is-current="validationIsCurrent"
+        :validation-result="validationResult"
+      />
 
-        <Alert v-if="previewError" variant="destructive">
-          <AlertTitle>Vorschau nicht verfuegbar</AlertTitle>
-          <AlertDescription>{{ previewError }}</AlertDescription>
-        </Alert>
+      <DownloadStep
+        v-else-if="currentStep === 'download' && hasRows"
+        :can-generate="canGenerate"
+        :can-generate-selected="canGenerateSelectedRow"
+        :can-preview-selected="canPreviewSelectedRow"
+        :generated-row-count="generatedRowUids.length"
+        :is-generating="isGenerating"
+        :is-preview-loading="isPreviewLoading"
+        :on-generate-all="generateInvoices"
+        :on-generate-selected="generateSelectedRowPdf"
+        :on-go-review="() => goToStep('review')"
+        :on-preview-selected="loadSelectedRowPreview"
+        :rows-length="editableRows.length"
+        :selected-row-label="selectedRowLabel"
+        :server-error="serverError"
+        :validation-is-current="validationIsCurrent"
+        :validation-result="validationResult"
+      />
 
-        <div v-if="selectedRow" :key="selectedRow.uid" class="grid gap-5">
-          <Card class="border-white/60 bg-white/88 shadow-lg backdrop-blur">
-            <CardHeader
-              class="gap-4 md:flex-row md:items-start md:justify-between"
-            >
-              <div>
-                <CardTitle class="text-xl">
-                  Zeile {{ selectedRowIndex + 2 }} ·
-                  {{ selectedRow.invoice_number || "Ohne Rechnungsnummer" }}
-                </CardTitle>
-                <CardDescription>
-                  {{ selectedRow.customer_name || "Ohne Kundenname" }} ·
-                  {{ selectedRow.dog_name || "Ohne Hundename" }}
-                </CardDescription>
-              </div>
-              <Badge
-                :variant="
-                  isRowGenerated(selectedRow.uid)
-                    ? 'secondary'
-                    : rowHasErrors(selectedRowIndex)
-                      ? 'destructive'
-                      : 'secondary'
-                "
-              >
-                {{
-                  isRowGenerated(selectedRow.uid)
-                    ? "PDF bereits erstellt"
-                    : rowHasErrors(selectedRowIndex)
-                      ? "Fehler vorhanden"
-                      : "Ohne Fehlerhinweis"
-                }}
-              </Badge>
-            </CardHeader>
-            <CardContent class="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-              <div class="grid gap-4 md:grid-cols-2">
-                <div class="space-y-2">
-                  <Label for="invoice-number-selected">Rechnungsnummer</Label>
-                  <Input
-                    id="invoice-number-selected"
-                    v-model="selectedRow.invoice_number"
-                    @update:model-value="markRowDirty"
-                  />
-                  <p
-                    v-for="message in validationErrorsForField(
-                      selectedRowIndex,
-                      'invoice_number',
-                    )"
-                    :key="message"
-                    class="text-xs text-rose-600"
-                  >
-                    {{ message }}
-                  </p>
-                </div>
-
-                <div class="space-y-2">
-                  <Label for="billing-month-selected">Abrechnungsmonat</Label>
-                  <Input
-                    id="billing-month-selected"
-                    v-model="selectedRow.billing_month"
-                    type="month"
-                    @update:model-value="markRowDirty"
-                  />
-                  <p
-                    v-for="message in validationErrorsForField(
-                      selectedRowIndex,
-                      'billing_month',
-                    )"
-                    :key="message"
-                    class="text-xs text-rose-600"
-                  >
-                    {{ message }}
-                  </p>
-                </div>
-
-                <div class="space-y-2">
-                  <Label for="invoice-date-selected">Rechnungsdatum</Label>
-                  <Input
-                    id="invoice-date-selected"
-                    v-model="selectedRow.invoice_date"
-                    type="date"
-                    @update:model-value="markRowDirty"
-                  />
-                  <p
-                    v-for="message in validationErrorsForField(
-                      selectedRowIndex,
-                      'invoice_date',
-                    )"
-                    :key="message"
-                    class="text-xs text-rose-600"
-                  >
-                    {{ message }}
-                  </p>
-                </div>
-
-                <div class="space-y-2">
-                  <Label for="due-date-selected">Faelligkeitsdatum</Label>
-                  <Input
-                    id="due-date-selected"
-                    v-model="selectedRow.due_date"
-                    type="date"
-                    @update:model-value="markRowDirty"
-                  />
-                  <p
-                    v-for="message in validationErrorsForField(
-                      selectedRowIndex,
-                      'due_date',
-                    )"
-                    :key="message"
-                    class="text-xs text-rose-600"
-                  >
-                    {{ message }}
-                  </p>
-                </div>
-
-                <div class="space-y-2">
-                  <Label for="customer-name-selected">Kundenname</Label>
-                  <Input
-                    id="customer-name-selected"
-                    v-model="selectedRow.customer_name"
-                    @update:model-value="markRowDirty"
-                  />
-                  <p
-                    v-for="message in validationErrorsForField(
-                      selectedRowIndex,
-                      'customer_name',
-                    )"
-                    :key="message"
-                    class="text-xs text-rose-600"
-                  >
-                    {{ message }}
-                  </p>
-                </div>
-
-                <div class="space-y-2">
-                  <Label for="dog-name-selected">Hundename</Label>
-                  <Input
-                    id="dog-name-selected"
-                    v-model="selectedRow.dog_name"
-                    @update:model-value="markRowDirty"
-                  />
-                  <p
-                    v-for="message in validationErrorsForField(
-                      selectedRowIndex,
-                      'dog_name',
-                    )"
-                    :key="message"
-                    class="text-xs text-rose-600"
-                  >
-                    {{ message }}
-                  </p>
-                </div>
-
-                <div class="space-y-2">
-                  <Label for="subscription-plan-selected">Abo-Modell</Label>
-                  <select
-                    id="subscription-plan-selected"
-                    v-model="selectedRow.subscription_plan"
-                    class="border-input bg-background flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs"
-                    @change="markRowDirty"
-                  >
-                    <option value="none">Kein Abo</option>
-                    <option value="1x_week">1x pro Woche</option>
-                    <option value="2x_week">2x pro Woche</option>
-                    <option value="3x_week">3x pro Woche</option>
-                    <option value="4x_week">4x pro Woche</option>
-                  </select>
-                  <p
-                    v-for="message in validationErrorsForField(
-                      selectedRowIndex,
-                      'subscription_plan',
-                    )"
-                    :key="message"
-                    class="text-xs text-rose-600"
-                  >
-                    {{ message }}
-                  </p>
-                  <p class="text-xs text-slate-500">
-                    Standardpreis:
-                    {{
-                      formatEuro(
-                        SUBSCRIPTION_PRICES[selectedRow.subscription_plan],
-                      )
-                    }}
-                  </p>
-                  <div
-                    class="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3"
-                  >
-                    <Label for="subscription-price-override-selected"
-                      >Abo-Preis manuell anpassen</Label
-                    >
-                    <Input
-                      id="subscription-price-override-selected"
-                      v-model="selectedRow.subscription_price_override"
-                      type="text"
-                      inputmode="decimal"
-                      :placeholder="
-                        SUBSCRIPTION_PRICES[
-                          selectedRow.subscription_plan
-                        ].toFixed(2)
-                      "
-                      :disabled="selectedRow.subscription_plan === 'none'"
-                      @update:model-value="markRowDirty"
-                      @blur="
-                        formatEditableMoneyField(
-                          selectedRow,
-                          'subscription_price_override',
-                        )
-                      "
-                    />
-                    <p class="text-xs text-slate-500">
-                      Leer = Standardtarif, Wert = nur fuer diese Zeile
-                      ueberschreiben.
-                    </p>
-                    <p
-                      v-for="message in validationErrorsForField(
-                        selectedRowIndex,
-                        'subscription_price_override',
-                      )"
-                      :key="message"
-                      class="text-xs text-rose-600"
-                    >
-                      {{ message }}
-                    </p>
-                  </div>
-                </div>
-
-                <div class="space-y-2">
-                  <Label for="daily-count-selected"
-                    >Zusaetzliche Tagesbetreuung</Label
-                  >
-                  <Input
-                    id="daily-count-selected"
-                    v-model="selectedRow.daily_count"
-                    type="number"
-                    min="0"
-                    @update:model-value="markRowDirty"
-                  />
-                  <p
-                    v-for="message in validationErrorsForField(
-                      selectedRowIndex,
-                      'daily_count',
-                    )"
-                    :key="message"
-                    class="text-xs text-rose-600"
-                  >
-                    {{ message }}
-                  </p>
-                  <p class="text-xs text-slate-500">
-                    Standardpreis pro Tag:
-                    {{
-                      formatEuro(
-                        selectedRow.daily_count_rebate
-                          ? DAILY_PRICE_REBATED
-                          : DAILY_PRICE,
-                      )
-                    }}
-                  </p>
-                  <div
-                    class="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3"
-                  >
-                    <Label for="daily-price-override-selected"
-                      >Tagespreis manuell anpassen</Label
-                    >
-                    <Input
-                      id="daily-price-override-selected"
-                      v-model="selectedRow.daily_price_override"
-                      type="text"
-                      inputmode="decimal"
-                      :placeholder="
-                        (selectedRow.daily_count_rebate
-                          ? DAILY_PRICE_REBATED
-                          : DAILY_PRICE
-                        ).toFixed(2)
-                      "
-                      @update:model-value="markRowDirty"
-                      @blur="
-                        formatEditableMoneyField(
-                          selectedRow,
-                          'daily_price_override',
-                        )
-                      "
-                    />
-                    <p class="text-xs text-slate-500">
-                      Gilt pro Termin und nur fuer diese Zeile.
-                    </p>
-                    <p
-                      v-for="message in validationErrorsForField(
-                        selectedRowIndex,
-                        'daily_price_override',
-                      )"
-                      :key="message"
-                      class="text-xs text-rose-600"
-                    >
-                      {{ message }}
-                    </p>
-                  </div>
-                </div>
-
-                <div
-                  class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 md:col-span-2"
-                >
-                  <input
-                    id="daily-count-rebate-selected"
-                    v-model="selectedRow.daily_count_rebate"
-                    type="checkbox"
-                    class="h-4 w-4 rounded border-slate-300"
-                    @change="markRowDirty"
-                  />
-                  <Label for="daily-count-rebate-selected"
-                    >Tagesbetreuung-Rabatt fuer alle Termine (30 statt
-                    35)</Label
-                  >
-                </div>
-
-                <div class="space-y-2 md:col-span-2">
-                  <Label for="daily-dates-selected"
-                    >Tagesbetreuung Termine</Label
-                  >
-                  <Input
-                    id="daily-dates-selected"
-                    v-model="selectedRow.daily_dates"
-                    placeholder="2026-03-03,2026-03-10,2026-03-17"
-                    @update:model-value="markRowDirty"
-                  />
-                  <p class="text-xs text-slate-500">
-                    Kommagetrennte ISO-Daten, z. B. 2026-03-03,2026-03-10
-                  </p>
-                  <p
-                    v-for="message in validationErrorsForField(
-                      selectedRowIndex,
-                      'daily_dates',
-                    )"
-                    :key="message"
-                    class="text-xs text-rose-600"
-                  >
-                    {{ message }}
-                  </p>
-                </div>
-
-                <div
-                  class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 md:col-span-2"
-                >
-                  <input
-                    id="test-run-selected"
-                    v-model="selectedRow.include_test_run"
-                    type="checkbox"
-                    class="h-4 w-4 rounded border-slate-300"
-                    @change="markRowDirty"
-                  />
-                  <Label for="test-run-selected">Probetag berechnen</Label>
-                </div>
-
-                <div class="space-y-2 md:col-span-2">
-                  <Label for="test-run-price-override-selected"
-                    >Probetag-Preis manuell anpassen</Label
-                  >
-                  <Input
-                    :key="`${selectedRow.uid}-test-run-price-${selectedRow.include_test_run}`"
-                    id="test-run-price-override-selected"
-                    v-model="selectedRow.test_run_price_override"
-                    type="text"
-                    inputmode="decimal"
-                    :placeholder="TEST_RUN_PRICE.toFixed(2)"
-                    :disabled="!selectedRow.include_test_run"
-                    @update:model-value="markRowDirty"
-                    @blur="
-                      formatEditableMoneyField(
-                        selectedRow,
-                        'test_run_price_override',
-                      )
-                    "
-                  />
-                  <p class="text-xs text-slate-500">
-                    Standardpreis: {{ formatEuro(TEST_RUN_PRICE) }}
-                  </p>
-                  <p
-                    v-for="message in validationErrorsForField(
-                      selectedRowIndex,
-                      'test_run_price_override',
-                    )"
-                    :key="message"
-                    class="text-xs text-rose-600"
-                  >
-                    {{ message }}
-                  </p>
-                </div>
-
-                <div
-                  class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 md:col-span-2"
-                >
-                  <input
-                    id="extended-km-surcharge-selected"
-                    v-model="selectedRow.include_extended_km_surcharge"
-                    type="checkbox"
-                    class="h-4 w-4 rounded border-slate-300"
-                    @change="markRowDirty"
-                  />
-                  <Label for="extended-km-surcharge-selected"
-                    >Zuschlag fuer erweiterten Kilometerbereich berechnen</Label
-                  >
-                </div>
-                <div class="space-y-2 md:col-span-2">
-                  <Label for="extended-km-surcharge-amount-selected"
-                    >Kilometer-Zuschlag</Label
-                  >
-                  <Input
-                    :key="`${selectedRow.uid}-extended-km-${selectedRow.include_extended_km_surcharge}`"
-                    id="extended-km-surcharge-amount-selected"
-                    v-model="selectedRow.extended_km_surcharge_amount"
-                    type="text"
-                    inputmode="decimal"
-                    :placeholder="
-                      DEFAULT_EXTENDED_KM_SURCHARGE_AMOUNT.toFixed(2)
-                    "
-                    :disabled="!selectedRow.include_extended_km_surcharge"
-                    @update:model-value="markRowDirty"
-                    @blur="
-                      formatEditableMoneyField(
-                        selectedRow,
-                        'extended_km_surcharge_amount',
-                      )
-                    "
-                  />
-                  <p class="text-xs text-slate-500">
-                    Standardwert:
-                    {{ formatEuro(DEFAULT_EXTENDED_KM_SURCHARGE_AMOUNT) }}
-                  </p>
-                  <p
-                    v-for="message in validationErrorsForField(
-                      selectedRowIndex,
-                      'extended_km_surcharge_amount',
-                    )"
-                    :key="message"
-                    class="text-xs text-rose-600"
-                  >
-                    {{ message }}
-                  </p>
-                </div>
-
-                <div class="space-y-2 md:col-span-2">
-                  <Label for="customer-address-selected">Kundenadresse</Label>
-                  <textarea
-                    id="customer-address-selected"
-                    v-model="selectedRow.customer_address"
-                    class="border-input bg-background min-h-24 w-full rounded-md border px-3 py-2 text-sm shadow-xs"
-                    @input="handleSelectedAddressInput"
-                  />
-                  <div class="flex flex-wrap items-center gap-3">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      :disabled="isResolvingSelectedRowDistance"
-                      @click="resolveSelectedRowAddressDistance"
-                    >
-                      {{
-                        isResolvingSelectedRowDistance
-                          ? "Adresse wird geprueft..."
-                          : "Adresse ueber Nominatim + OSRM pruefen"
-                      }}
-                    </Button>
-                    <p class="text-xs text-slate-500">
-                      Loest die Adresse in Koordinaten auf und setzt den
-                      Kilometer-Zuschlag passend zum
-                      {{ SERVICE_AREA_RADIUS_KM }}-km-Standardbereich.
-                    </p>
-                  </div>
-                  <p
-                    v-for="message in validationErrorsForField(
-                      selectedRowIndex,
-                      'customer_address',
-                    )"
-                    :key="message"
-                    class="text-xs text-rose-600"
-                  >
-                    {{ message }}
-                  </p>
-                  <Alert
-                    v-if="selectedRowAddressDistanceError"
-                    variant="destructive"
-                  >
-                    <AlertTitle>Distanz konnte nicht berechnet werden</AlertTitle>
-                    <AlertDescription>
-                      {{ selectedRowAddressDistanceError }}
-                    </AlertDescription>
-                  </Alert>
-                  <div
-                    v-if="selectedRowAddressDistance"
-                    class="rounded-xl border border-slate-200 bg-slate-50 p-4"
-                  >
-                    <div
-                      class="flex flex-wrap items-start justify-between gap-3"
-                    >
-                      <div>
-                        <p
-                          class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500"
-                        >
-                          Distanz ab Basis
-                        </p>
-                        <p class="mt-1 text-2xl font-semibold text-slate-950">
-                          {{
-                            formatKilometers(
-                              selectedRowAddressDistance.route_distance_km,
-                            )
-                          }}
-                        </p>
-                      </div>
-                      <Badge
-                        :variant="
-                          selectedRowAddressDistance.should_apply_extended_km_surcharge
-                            ? 'destructive'
-                            : 'secondary'
-                        "
-                      >
-                        {{
-                          selectedRowAddressDistance.should_apply_extended_km_surcharge
-                            ? 'Zuschlag aktiv'
-                            : 'Im Standardbereich'
-                        }}
-                      </Badge>
-                    </div>
-                    <p class="mt-3 text-sm text-slate-700">
-                      {{ selectedRowAddressDistance.resolved_address }}
-                    </p>
-                    <p class="mt-2 text-xs text-slate-500">
-                      Start:
-                      {{
-                        formatCoordinate(
-                          selectedRowAddressDistance.origin.latitude,
-                        )
-                      }},
-                      {{
-                        formatCoordinate(
-                          selectedRowAddressDistance.origin.longitude,
-                        )
-                      }}
-                      · Ziel:
-                      {{
-                        formatCoordinate(
-                          selectedRowAddressDistance.destination.latitude,
-                        )
-                      }},
-                      {{
-                        formatCoordinate(
-                          selectedRowAddressDistance.destination.longitude,
-                        )
-                      }}
-                    </p>
-                    <p class="mt-2 text-xs text-slate-500">
-                      Standardbereich:
-                      {{
-                        formatKilometers(
-                          selectedRowAddressDistance.included_radius_km,
-                        )
-                      }}.
-                      Der Zuschlag-Schalter wurde automatisch
-                      {{
-                        selectedRowAddressDistance.should_apply_extended_km_surcharge
-                          ? 'aktiviert'
-                          : 'deaktiviert'
-                      }}.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p
-                  class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500"
-                >
-                  Vorschau der Leistungspositionen
-                </p>
-                <div class="mt-4 space-y-3">
-                  <div
-                    v-for="item in previewLineItems(selectedRow)"
-                    :key="`${item.label}-${item.detail}`"
-                    class="rounded-xl border border-white bg-white p-3 shadow-sm"
-                  >
-                    <div class="flex items-start justify-between gap-3">
-                      <div>
-                        <p class="font-medium text-slate-950">
-                          {{ item.label }}
-                        </p>
-                        <p class="text-sm text-slate-600">{{ item.detail }}</p>
-                      </div>
-                      <p class="font-semibold text-slate-950">
-                        {{ formatEuro(item.amount) }}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div
-                    v-if="previewLineItems(selectedRow).length === 0"
-                    class="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500"
-                  >
-                    Noch keine abrechenbare Position vorhanden.
-                  </div>
-                </div>
-
-                <div
-                  class="mt-4 rounded-xl bg-slate-950 px-4 py-3 text-slate-50"
-                >
-                  <p class="text-xs uppercase tracking-[0.16em] text-slate-300">
-                    Netto geschaetzt
-                  </p>
-                  <p class="mt-1 text-2xl font-semibold">
-                    {{ formatEuro(estimateTotal(selectedRow)) }}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-        <div
-          v-else
-          class="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-8 text-center text-sm text-slate-600"
-        >
-          Alle aktuell ausgewaehlten Zeilen wurden bereits als PDF erzeugt.
-        </div>
+      <section
+        v-else
+        class="rounded-[2rem] border border-dashed border-[#d9e2d4] bg-white/70 p-8 text-center text-sm leading-7 text-slate-600"
+      >
+        Lade zuerst eine CSV hoch, damit die naechsten Schritte sichtbar werden.
       </section>
     </div>
   </main>
