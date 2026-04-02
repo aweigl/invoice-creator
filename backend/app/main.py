@@ -7,10 +7,13 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from app.config import MAX_CSV_BYTES
 from app.schemas import (
+    AddressDistanceRequest,
+    AddressDistanceResponse,
     CsvValidationResult,
     PricingRowsPayload,
 )
 from app.services.csv_parser import CsvParseError, decode_csv_content, parse_csv_rows
+from app.services.geo_routing import AddressLookupError, resolve_address_distance
 from app.services.pricing import build_invoice_document
 from app.services.validator import validate_invoice_rows
 from app.services.zip_bundle import build_zip_bundle
@@ -57,6 +60,16 @@ async def validate_csv(file: UploadFile = File(...)) -> CsvValidationResult:
 @app.post("/api/invoices/validate-rows", response_model=CsvValidationResult)
 def validate_invoice_rows_payload(payload: PricingRowsPayload) -> CsvValidationResult:
     return validate_invoice_rows(payload.rows, filename=payload.filename)
+
+
+@app.post("/api/address/resolve-distance", response_model=AddressDistanceResponse)
+def resolve_address_distance_payload(
+    payload: AddressDistanceRequest,
+) -> AddressDistanceResponse:
+    try:
+        return resolve_address_distance(payload.address)
+    except AddressLookupError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 @app.post("/api/invoices/generate")

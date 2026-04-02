@@ -7,6 +7,7 @@ from app.config import (
     DAILY_PRICE_REBATED,
     DEFAULT_TAX_RATE,
     EXTENDED_KM_SURCHARGE_DEFAULT,
+    SERVICE_AREA_RADIUS_KM,
     SUBSCRIPTION_PRICES,
     TEST_RUN_PRICE,
 )
@@ -94,7 +95,10 @@ def build_line_items(row: PricingInvoiceCsvRow) -> list[PricingInvoiceLineItem]:
         items.append(
             PricingInvoiceLineItem(
                 description="Erweiterter Kilometerbereich",
-                detail="Zuschlag fuer Anfahrt ausserhalb des Standardbereichs",
+                detail=(
+                    "Zuschlag fuer Anfahrt ausserhalb des "
+                    f"Standardbereichs ({SERVICE_AREA_RADIUS_KM:g} km)"
+                ),
                 quantity=Decimal("1"),
                 unit_price=surcharge_amount,
                 amount=surcharge_amount,

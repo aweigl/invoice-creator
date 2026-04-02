@@ -86,6 +86,22 @@ type PreviewLineItem = {
   amount: number;
 };
 
+type CoordinatePoint = {
+  latitude: number;
+  longitude: number;
+};
+
+type AddressDistanceResult = {
+  address: string;
+  resolved_address: string;
+  origin: CoordinatePoint;
+  destination: CoordinatePoint;
+  route_distance_meters: number;
+  route_distance_km: number;
+  included_radius_km: number;
+  should_apply_extended_km_surcharge: boolean;
+};
+
 const MAX_CSV_BYTES = 2 * 1024 * 1024;
 const REQUIRED_COLUMNS = [
   "invoice_number",
@@ -126,7 +142,8 @@ const PLAN_LABELS: Record<SubscriptionPlan, string> = {
 const DAILY_PRICE = 35;
 const DAILY_PRICE_REBATED = 30;
 const TEST_RUN_PRICE = 20;
-const DEFAULT_EXTENDED_KM_SURCHARGE_AMOUNT = 2.5;
+const DEFAULT_EXTENDED_KM_SURCHARGE_AMOUNT = 5.0;
+const SERVICE_AREA_RADIUS_KM = 17;
 const CSV_DELIMITERS = [";", ","] as const;
 const SAMPLE_CSV_DOWNLOAD_PATH = `${import.meta.env.BASE_URL}invoice-pricing-example.csv`;
 
@@ -147,6 +164,9 @@ const lastValidatedSnapshot = ref("");
 const selectedRowUid = ref("");
 const generatedRowUids = ref<string[]>([]);
 const previewError = ref("");
+const distanceLookupResults = ref<Record<string, AddressDistanceResult>>({});
+const distanceLookupErrors = ref<Record<string, string>>({});
+const resolvingDistanceRowUid = ref("");
 
 const hasRows = computed(() => editableRows.value.length > 0);
 const generatedRowUidSet = computed(() => new Set(generatedRowUids.value));
@@ -156,6 +176,19 @@ const selectedRowIndex = computed(() =>
 const selectedRow = computed(
   () =>
     editableRows.value.find((row) => row.uid === selectedRowUid.value) ?? null,
+);
+const selectedRowAddressDistance = computed(() =>
+  selectedRow.value
+    ? distanceLookupResults.value[selectedRow.value.uid] ?? null
+    : null,
+);
+const selectedRowAddressDistanceError = computed(() =>
+  selectedRow.value ? distanceLookupErrors.value[selectedRow.value.uid] ?? "" : "",
+);
+const isResolvingSelectedRowDistance = computed(
+  () =>
+    selectedRow.value !== null &&
+    resolvingDistanceRowUid.value === selectedRow.value.uid,
 );
 
 const currentRowsSnapshot = computed(() =>
@@ -198,6 +231,17 @@ function formatEuro(amount: number): string {
     style: "currency",
     currency: "EUR",
   }).format(amount);
+}
+
+function formatKilometers(value: number): string {
+  return `${new Intl.NumberFormat("de-DE", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 2,
+  }).format(value)} km`;
+}
+
+function formatCoordinate(value: number): string {
+  return value.toFixed(6);
 }
 
 function formatGermanMonth(value: string): string {
@@ -549,7 +593,7 @@ function previewLineItems(row: EditablePricingRow): PreviewLineItem[] {
   if (row.include_extended_km_surcharge) {
     items.push({
       label: "Erweiterter Kilometerbereich",
-      detail: "Zuschlag für Anfahrt ausserhalb des Standardbereichs (10km)",
+      detail: `Zuschlag fuer Anfahrt ausserhalb des Standardbereichs (${SERVICE_AREA_RADIUS_KM}km)`,
       amount: effectiveExtendedKmSurchargeAmount(row),
     });
   }
@@ -568,6 +612,26 @@ function markRowsDirty() {
 
 function markRowDirty() {
   markRowsDirty();
+}
+
+function clearAddressDistanceStateForRow(uid: string) {
+  const { [uid]: _result, ...remainingResults } = distanceLookupResults.value;
+  const { [uid]: _error, ...remainingErrors } = distanceLookupErrors.value;
+
+  distanceLookupResults.value = remainingResults;
+  distanceLookupErrors.value = remainingErrors;
+
+  if (resolvingDistanceRowUid.value === uid) {
+    resolvingDistanceRowUid.value = "";
+  }
+}
+
+function handleSelectedAddressInput() {
+  markRowDirty();
+
+  if (selectedRow.value) {
+    clearAddressDistanceStateForRow(selectedRow.value.uid);
+  }
 }
 
 function selectNextAvailableRow() {
@@ -593,6 +657,9 @@ async function handleFileChange(event: Event) {
   selectedRowUid.value = "";
   generatedRowUids.value = [];
   previewError.value = "";
+  distanceLookupResults.value = {};
+  distanceLookupErrors.value = {};
+  resolvingDistanceRowUid.value = "";
 
   if (!file) {
     return;
@@ -757,6 +824,76 @@ function buildSingleRowPayload(row: EditablePricingRow) {
       },
     ],
   };
+}
+
+async function resolveSelectedRowAddressDistance() {
+  if (!selectedRow.value) {
+    serverError.value = "Bitte waehle zuerst eine Rechnungszeile aus.";
+    return;
+  }
+
+  const rowUid = selectedRow.value.uid;
+  const address = selectedRow.value.customer_address.trim();
+  clearAddressDistanceStateForRow(rowUid);
+
+  if (!address) {
+    distanceLookupErrors.value = {
+      ...distanceLookupErrors.value,
+      [rowUid]: "Bitte hinterlege zuerst eine Kundenadresse.",
+    };
+    return;
+  }
+
+  resolvingDistanceRowUid.value = rowUid;
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/address/resolve-distance`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ address }),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as {
+        detail?: string;
+      } | null;
+      throw new Error(
+        payload?.detail ?? `Distanzberechnung fehlgeschlagen (${response.status})`,
+      );
+    }
+
+    const result = (await response.json()) as AddressDistanceResult;
+    distanceLookupResults.value = {
+      ...distanceLookupResults.value,
+      [rowUid]: result,
+    };
+
+    const { [rowUid]: _error, ...remainingErrors } = distanceLookupErrors.value;
+    distanceLookupErrors.value = remainingErrors;
+
+    const targetRow = editableRows.value.find((row) => row.uid === rowUid);
+    if (targetRow) {
+      targetRow.include_extended_km_surcharge =
+        result.should_apply_extended_km_surcharge;
+    }
+
+    markRowDirty();
+  } catch (error) {
+    clearAddressDistanceStateForRow(rowUid);
+    distanceLookupErrors.value = {
+      ...distanceLookupErrors.value,
+      [rowUid]:
+        error instanceof Error
+          ? error.message
+          : "Unbekannter Fehler bei der Distanzberechnung.",
+    };
+  } finally {
+    if (resolvingDistanceRowUid.value === rowUid) {
+      resolvingDistanceRowUid.value = "";
+    }
+  }
 }
 
 async function generateSelectedRowPdf() {
@@ -1688,8 +1825,27 @@ watch(selectedRowUid, () => {
                     id="customer-address-selected"
                     v-model="selectedRow.customer_address"
                     class="border-input bg-background min-h-24 w-full rounded-md border px-3 py-2 text-sm shadow-xs"
-                    @input="markRowDirty"
+                    @input="handleSelectedAddressInput"
                   />
+                  <div class="flex flex-wrap items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      :disabled="isResolvingSelectedRowDistance"
+                      @click="resolveSelectedRowAddressDistance"
+                    >
+                      {{
+                        isResolvingSelectedRowDistance
+                          ? "Adresse wird geprueft..."
+                          : "Adresse ueber Nominatim + OSRM pruefen"
+                      }}
+                    </Button>
+                    <p class="text-xs text-slate-500">
+                      Loest die Adresse in Koordinaten auf und setzt den
+                      Kilometer-Zuschlag passend zum
+                      {{ SERVICE_AREA_RADIUS_KM }}-km-Standardbereich.
+                    </p>
+                  </div>
                   <p
                     v-for="message in validationErrorsForField(
                       selectedRowIndex,
@@ -1700,6 +1856,92 @@ watch(selectedRowUid, () => {
                   >
                     {{ message }}
                   </p>
+                  <Alert
+                    v-if="selectedRowAddressDistanceError"
+                    variant="destructive"
+                  >
+                    <AlertTitle>Distanz konnte nicht berechnet werden</AlertTitle>
+                    <AlertDescription>
+                      {{ selectedRowAddressDistanceError }}
+                    </AlertDescription>
+                  </Alert>
+                  <div
+                    v-if="selectedRowAddressDistance"
+                    class="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <div
+                      class="flex flex-wrap items-start justify-between gap-3"
+                    >
+                      <div>
+                        <p
+                          class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500"
+                        >
+                          Distanz ab Basis
+                        </p>
+                        <p class="mt-1 text-2xl font-semibold text-slate-950">
+                          {{
+                            formatKilometers(
+                              selectedRowAddressDistance.route_distance_km,
+                            )
+                          }}
+                        </p>
+                      </div>
+                      <Badge
+                        :variant="
+                          selectedRowAddressDistance.should_apply_extended_km_surcharge
+                            ? 'destructive'
+                            : 'secondary'
+                        "
+                      >
+                        {{
+                          selectedRowAddressDistance.should_apply_extended_km_surcharge
+                            ? 'Zuschlag aktiv'
+                            : 'Im Standardbereich'
+                        }}
+                      </Badge>
+                    </div>
+                    <p class="mt-3 text-sm text-slate-700">
+                      {{ selectedRowAddressDistance.resolved_address }}
+                    </p>
+                    <p class="mt-2 text-xs text-slate-500">
+                      Start:
+                      {{
+                        formatCoordinate(
+                          selectedRowAddressDistance.origin.latitude,
+                        )
+                      }},
+                      {{
+                        formatCoordinate(
+                          selectedRowAddressDistance.origin.longitude,
+                        )
+                      }}
+                      · Ziel:
+                      {{
+                        formatCoordinate(
+                          selectedRowAddressDistance.destination.latitude,
+                        )
+                      }},
+                      {{
+                        formatCoordinate(
+                          selectedRowAddressDistance.destination.longitude,
+                        )
+                      }}
+                    </p>
+                    <p class="mt-2 text-xs text-slate-500">
+                      Standardbereich:
+                      {{
+                        formatKilometers(
+                          selectedRowAddressDistance.included_radius_km,
+                        )
+                      }}.
+                      Der Zuschlag-Schalter wurde automatisch
+                      {{
+                        selectedRowAddressDistance.should_apply_extended_km_surcharge
+                          ? 'aktiviert'
+                          : 'deaktiviert'
+                      }}.
+                    </p>
+                  </div>
                 </div>
               </div>
 

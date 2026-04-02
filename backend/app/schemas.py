@@ -274,3 +274,23 @@ class CsvValidationResult(BaseModel):
 class PricingRowsPayload(BaseModel):
     filename: str = "bearbeitete-rechnungen.csv"
     rows: list[dict[str, Any]]
+
+
+class AddressDistanceRequest(BaseModel):
+    address: str = Field(min_length=1)
+
+
+class CoordinatePoint(BaseModel):
+    latitude: float
+    longitude: float
+
+
+class AddressDistanceResponse(BaseModel):
+    address: str
+    resolved_address: str
+    origin: CoordinatePoint
+    destination: CoordinatePoint
+    route_distance_meters: float
+    route_distance_km: float
+    included_radius_km: float
+    should_apply_extended_km_surcharge: bool
