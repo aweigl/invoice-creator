@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import unittest
+from typing import Any, cast
 from pathlib import Path
 from unittest.mock import patch
 
@@ -44,29 +45,30 @@ async def asgi_request(
 
     body_sent = False
 
-    async def receive() -> dict[str, object]:
+    async def receive() -> dict[str, Any]:
         nonlocal body_sent
         if body_sent:
             return {"type": "http.disconnect"}
         body_sent = True
         return {"type": "http.request", "body": body, "more_body": False}
 
-    async def send(message: dict[str, object]) -> None:
+    async def send(message: dict[str, Any]) -> None:
         nonlocal response_status
         if message["type"] == "http.response.start":
             response_status = int(message["status"])
+            raw_headers = cast(list[tuple[bytes, bytes]], message["headers"])
             response_headers.update(
                 {
                     key.decode("latin1"): value.decode("latin1")
-                    for key, value in message["headers"]
+                    for key, value in raw_headers
                 }
             )
             return
 
         if message["type"] == "http.response.body":
-            body_chunks.append(message.get("body", b""))
+            body_chunks.append(cast(bytes, message.get("body", b"")))
 
-    scope = {
+    scope: dict[str, Any] = {
         "type": "http",
         "http_version": "1.1",
         "method": method,
@@ -237,14 +239,15 @@ class AuthAndRateLimitTest(unittest.TestCase):
 
         self.assertEqual(statuses, [200, 200, 200])
 
-    def test_localhost_requests_bypass_basic_auth_in_local_development(self):
-        status_code, headers, body = asyncio.run(
-            asgi_request(
-                method="GET",
-                path="/",
-                headers=[(b"host", b"localhost:8000")],
+    def test_disable_flag_bypasses_basic_auth(self):
+        with patch.dict(os.environ, {"APP_DISABLE_BASIC_AUTH": "true"}):
+            status_code, headers, body = asyncio.run(
+                asgi_request(
+                    method="GET",
+                    path="/",
+                    headers=[(b"host", b"example.com")],
+                )
             )
-        )
 
         self.assertEqual(status_code, 200)
         self.assertNotIn("www-authenticate", headers)

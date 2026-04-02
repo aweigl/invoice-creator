@@ -93,7 +93,7 @@ The backend also auto-loads a project-root `.env` file, so local `yarn dev` work
 Every route except `GET /health` is protected with HTTP Basic Auth.
 When you load the FastAPI-served app, the browser will show its native username/password prompt before the page loads.
 When you run the frontend separately with Vite in development, the first protected API request will trigger that prompt.
-For local development on `localhost` or `127.0.0.1`, the backend skips the Basic Auth check so `yarn dev` works without a browser login prompt.
+For local development, the root `dev` command sets `APP_DISABLE_BASIC_AUTH=true` for the backend process so `yarn dev` works without a browser login prompt.
 
 ## Single-Service Production Run
 
@@ -166,7 +166,7 @@ The same [Dockerfile](/Users/aweigl/Desktop/Projects/invoice-creator/Dockerfile)
 
 The app now uses in-memory HTTP Basic Auth and minimal credential-scoped rate limiting inside FastAPI.
 This is intentionally not based on IP allowlisting, because home internet connections often use dynamic public IP addresses.
-Requests to `localhost` and `127.0.0.1` are treated as local development traffic and bypass the Basic Auth check.
+Local auth bypass is controlled only by the explicit `APP_DISABLE_BASIC_AUTH=true` env flag, which is enabled by the local backend dev script and should stay unset in production.
 
 Protected routes:
 

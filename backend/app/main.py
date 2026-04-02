@@ -3,6 +3,7 @@ import binascii
 import os
 import secrets
 import time
+from collections.abc import Awaitable, Callable
 from collections import deque
 from io import BytesIO
 from pathlib import Path
@@ -44,13 +45,16 @@ ROUTE_GROUP_LIMITS = {
 }
 _rate_limit_buckets: dict[str, deque[float]] = {}
 
-APP_BASIC_AUTH_USERNAME = os.getenv("APP_BASIC_AUTH_USERNAME")
-APP_BASIC_AUTH_PASSWORD = os.getenv("APP_BASIC_AUTH_PASSWORD")
 
-if not APP_BASIC_AUTH_USERNAME or not APP_BASIC_AUTH_PASSWORD:
-    raise RuntimeError(
-        "APP_BASIC_AUTH_USERNAME and APP_BASIC_AUTH_PASSWORD must be set."
-    )
+def _get_required_env_var(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"{name} must be set.")
+    return value
+
+
+APP_BASIC_AUTH_USERNAME = _get_required_env_var("APP_BASIC_AUTH_USERNAME")
+APP_BASIC_AUTH_PASSWORD = _get_required_env_var("APP_BASIC_AUTH_PASSWORD")
 
 
 def _current_time() -> float:
@@ -118,8 +122,13 @@ def _is_protected_path(path: str) -> bool:
     return path != "/health"
 
 
-def _is_local_development_request(request: Request) -> bool:
-    return request.url.hostname in {"localhost", "127.0.0.1"}
+def _is_basic_auth_disabled() -> bool:
+    return os.getenv("APP_DISABLE_BASIC_AUTH", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def _route_group_for_request(request: Request) -> str | None:
@@ -169,8 +178,11 @@ app.add_middleware(
 
 
 @app.middleware("http")
-async def enforce_basic_auth_and_rate_limits(request: Request, call_next):
-    if not _is_protected_path(request.url.path) or _is_local_development_request(request):
+async def enforce_basic_auth_and_rate_limits(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
+    if not _is_protected_path(request.url.path) or _is_basic_auth_disabled():
         return await call_next(request)
 
     authenticated_username = _authenticate_request(request)
