@@ -1,3 +1,4 @@
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -5,6 +6,8 @@ from unittest.mock import patch
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+os.environ.setdefault("APP_BASIC_AUTH_USERNAME", "test-user")
+os.environ.setdefault("APP_BASIC_AUTH_PASSWORD", "test-pass")
 
 from fastapi import HTTPException
 

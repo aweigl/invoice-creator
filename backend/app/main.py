@@ -1,9 +1,16 @@
+import base64
+import binascii
+import os
+import secrets
+import time
+from collections import deque
 from io import BytesIO
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from dotenv import load_dotenv
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
 from app.config import MAX_CSV_BYTES
 from app.schemas import (
@@ -25,6 +32,130 @@ from app.services.zip_bundle import build_zip_bundle
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIST_DIR = PROJECT_ROOT / "frontend" / "dist"
+load_dotenv(PROJECT_ROOT / ".env")
+load_dotenv(PROJECT_ROOT / "backend" / ".env")
+BASIC_AUTH_REALM = "Invoice Creator"
+RATE_LIMIT_WINDOW_SECONDS = 60.0
+AUTH_FAILURE_LIMIT = 10
+ROUTE_GROUP_LIMITS = {
+    "generate": 2,
+    "validate": 8,
+    "address": 20,
+}
+_rate_limit_buckets: dict[str, deque[float]] = {}
+
+APP_BASIC_AUTH_USERNAME = os.getenv("APP_BASIC_AUTH_USERNAME")
+APP_BASIC_AUTH_PASSWORD = os.getenv("APP_BASIC_AUTH_PASSWORD")
+
+if not APP_BASIC_AUTH_USERNAME or not APP_BASIC_AUTH_PASSWORD:
+    raise RuntimeError(
+        "APP_BASIC_AUTH_USERNAME and APP_BASIC_AUTH_PASSWORD must be set."
+    )
+
+
+def _current_time() -> float:
+    return time.monotonic()
+
+
+def _clear_rate_limit_buckets() -> None:
+    _rate_limit_buckets.clear()
+
+
+def _check_rate_limit(bucket_key: str, limit: int) -> bool:
+    now = _current_time()
+    bucket = _rate_limit_buckets.setdefault(bucket_key, deque())
+    window_start = now - RATE_LIMIT_WINDOW_SECONDS
+
+    while bucket and bucket[0] <= window_start:
+        bucket.popleft()
+
+    if len(bucket) >= limit:
+        return False
+
+    bucket.append(now)
+    return True
+
+
+def _get_client_host(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def _decode_basic_auth_header(authorization: str | None) -> tuple[str, str] | None:
+    if not authorization:
+        return None
+
+    scheme, _, encoded_credentials = authorization.partition(" ")
+    if scheme.lower() != "basic" or not encoded_credentials:
+        return None
+
+    try:
+        decoded = base64.b64decode(encoded_credentials).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError):
+        return None
+
+    username, separator, password = decoded.partition(":")
+    if not separator:
+        return None
+
+    return username, password
+
+
+def _authenticate_request(request: Request) -> str | None:
+    credentials = _decode_basic_auth_header(request.headers.get("authorization"))
+    if credentials is None:
+        return None
+
+    username, password = credentials
+    if not secrets.compare_digest(username, APP_BASIC_AUTH_USERNAME):
+        return None
+    if not secrets.compare_digest(password, APP_BASIC_AUTH_PASSWORD):
+        return None
+
+    return username
+
+
+def _is_protected_path(path: str) -> bool:
+    return path != "/health"
+
+
+def _is_local_development_request(request: Request) -> bool:
+    return request.url.hostname in {"localhost", "127.0.0.1"}
+
+
+def _route_group_for_request(request: Request) -> str | None:
+    if request.method == "POST" and request.url.path in {
+        "/api/invoices/generate",
+        "/api/invoices/generate-single",
+    }:
+        return "generate"
+
+    if request.url.path in {
+        "/api/csv/validate",
+        "/api/invoices/validate-rows",
+    }:
+        return "validate"
+
+    if request.url.path in {
+        "/api/address/autocomplete",
+        "/api/address/resolve-distance",
+    }:
+        return "address"
+
+    return None
+
+
+def _unauthorized_response() -> Response:
+    return Response(
+        status_code=401,
+        headers={"WWW-Authenticate": f'Basic realm="{BASIC_AUTH_REALM}"'},
+    )
+
+
+def _too_many_requests_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Zu viele Anfragen. Bitte warte kurz und versuche es erneut."},
+    )
 
 app = FastAPI(title="Invoice Creator API")
 
@@ -35,6 +166,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def enforce_basic_auth_and_rate_limits(request: Request, call_next):
+    if not _is_protected_path(request.url.path) or _is_local_development_request(request):
+        return await call_next(request)
+
+    authenticated_username = _authenticate_request(request)
+    if authenticated_username is None:
+        auth_failure_bucket = f"auth-failure:{_get_client_host(request)}"
+        if not _check_rate_limit(auth_failure_bucket, AUTH_FAILURE_LIMIT):
+            return _too_many_requests_response()
+        return _unauthorized_response()
+
+    route_group = _route_group_for_request(request)
+    if route_group is not None:
+        bucket_key = f"{route_group}:{authenticated_username}"
+        if not _check_rate_limit(bucket_key, ROUTE_GROUP_LIMITS[route_group]):
+            return _too_many_requests_response()
+
+    request.state.authenticated_username = authenticated_username
+    return await call_next(request)
 
 
 @app.get("/health")

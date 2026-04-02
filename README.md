@@ -81,6 +81,20 @@ The backend runs on `http://localhost:8000`.
 
 The backend CORS setup accepts local frontend origins such as `localhost` and `127.0.0.1` on any port for development.
 
+Set these environment variables before starting the backend:
+
+```bash
+export APP_BASIC_AUTH_USERNAME="dein-benutzername"
+export APP_BASIC_AUTH_PASSWORD="ein-langes-zufaelliges-passwort"
+```
+
+The backend also auto-loads a project-root `.env` file, so local `yarn dev` works even when terminal env-file injection is disabled.
+
+Every route except `GET /health` is protected with HTTP Basic Auth.
+When you load the FastAPI-served app, the browser will show its native username/password prompt before the page loads.
+When you run the frontend separately with Vite in development, the first protected API request will trigger that prompt.
+For local development on `localhost` or `127.0.0.1`, the backend skips the Basic Auth check so `yarn dev` works without a browser login prompt.
+
 ## Single-Service Production Run
 
 To test the production-style flow locally:
@@ -147,6 +161,28 @@ The container has a built-in health check that calls `GET /health`, which matche
 ## Railway
 
 The same [Dockerfile](/Users/aweigl/Desktop/Projects/invoice-creator/Dockerfile) also works for Railway, and the existing [railway.json](/Users/aweigl/Desktop/Projects/invoice-creator/railway.json) still points Railway at that image build.
+
+## Access Control And Rate Limits
+
+The app now uses in-memory HTTP Basic Auth and minimal credential-scoped rate limiting inside FastAPI.
+This is intentionally not based on IP allowlisting, because home internet connections often use dynamic public IP addresses.
+Requests to `localhost` and `127.0.0.1` are treated as local development traffic and bypass the Basic Auth check.
+
+Protected routes:
+
+- all frontend routes and built assets served by FastAPI
+- all `/api/*` endpoints
+
+Open route:
+
+- `GET /health`
+
+Default limits:
+
+- failed or missing auth on protected routes: `10/min`
+- `POST /api/invoices/generate` and `POST /api/invoices/generate-single`: shared `2/min`
+- `POST /api/csv/validate` and `POST /api/invoices/validate-rows`: shared `8/min`
+- `GET /api/address/autocomplete` and `POST /api/address/resolve-distance`: shared `20/min`
 
 ## Current API
 
