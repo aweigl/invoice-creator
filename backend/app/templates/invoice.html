@@ -89,7 +89,6 @@
       .totals {
         width: 40%;
         float: right;
-        margin-bottom: 0.5cm;
       }
 
       .totals td {
@@ -99,8 +98,8 @@
       .bottom-container {
         display: flex;
         justify-content: space-between;
-        margin-top: 1.5cm;
-        margin-bottom: 1.5cm;
+        margin-top: 18px;
+        margin-bottom: 18px;
         page-break-inside: avoid;
       }
 
@@ -121,7 +120,7 @@
       }
 
       .greeting {
-        margin-bottom: 1.5cm;
+        margin-bottom: 16px;
         text-align: left;
       }
     </style>
@@ -151,7 +150,7 @@
       <br />Steuernummer: {{ recipient.tax_id }} {% endif %}
     </div>
 
-    <table>
+    <table style="margin-bottom: 16px">
       <thead>
         <tr>
           <th style="width: 5%">#</th>
@@ -180,7 +179,7 @@
     </table>
 
     <div class="totals">
-      <table>
+      <table style="margin-bottom: 32px">
         <tr>
           <td>Zwischensumme:</td>
           <td class="number-cell">{{ totals.net_amount }}</td>
@@ -217,7 +216,6 @@
       Mit freundlichen Grüßen,<br />
       Lisa Weber
     </div>
-
     <div class="bottom-container">
       <div class="sender-details">
         <strong>{{ sender.name }}</strong><br />

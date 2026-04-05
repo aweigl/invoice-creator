@@ -1395,12 +1395,6 @@ async function loadSelectedRowPreview() {
     return;
   }
 
-  if (!validationIsCurrent.value) {
-    previewError.value =
-      "Bitte prüfe die aktuellen Daten erneut, bevor du die PDF-Vorschau lädst.";
-    return;
-  }
-
   if (rowHasErrors(selectedRowIndex.value)) {
     previewError.value =
       "Die ausgewählte Rechnung enthält noch Validierungsfehler.";
